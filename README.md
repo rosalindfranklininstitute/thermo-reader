@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 # Thermo Raw Reader NeXus Tools
 
 This repo uses
-[RawFileReader][https://github.com/thermofisherlsms/RawFileReader/] to read
+[RawFileReader](https://github.com/thermofisherlsms/RawFileReader/) to read
 mass spectrometry data and convert it into the
-[NeXus][https://www.nexusformat.org/] format. 
+[NeXus](https://www.nexusformat.org/) format. 
 
 ## NeXus details
 Nexus is a general metadata structure, and so can host any data shape.
