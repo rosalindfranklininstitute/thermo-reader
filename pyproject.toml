@@ -16,12 +16,11 @@ dependencies = [
     "ms-nexus-tools",
     "pythonnet>=3.0.5",
 ]
-license='dynamic'
-license-files = ["LICENSES/*", "./src/thermo_reader/dlls/License.md"]
+license = 'Apache-2.0 AND LicenseRef-RawFileReader-reading-tool'
+license-files = ["LICENSES/*"]
 
 [project.scripts]
 main = "thermo_reader:main"
-test = "thermo_reader:test"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
