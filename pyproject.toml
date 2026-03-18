@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 RFI
+#
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "thermo-reader"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Duncan McDougall", email = "duncan.mcdougall@rfi.ac.uk" }
+]
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "icecream>=2.1.10",
+    "ms-nexus-tools",
+    "pythonnet>=3.0.5",
+]
+license='dynamic'
+license-files = ["LICENSES/*", "./src/thermo_reader/dlls/License.md"]
+
+[project.scripts]
+main = "thermo_reader:main"
+test = "thermo_reader:test"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+ms-nexus-tools = { path = "../ms-nexus-tools", editable = true }
