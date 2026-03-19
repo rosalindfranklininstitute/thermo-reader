@@ -18,6 +18,7 @@ from ms_nexus_tools.api import (
 )
 from ms_nexus_tools.api.args import arg_field, ArgType, ConfigFileArgs
 from ms_nexus_tools.api.formula_args import FormulaArgs
+from ms_nexus_tools.api.mass_range_args import MassRangeArgs
 from ms_nexus_tools.api.image_args import (
     LayerSliceArgs,
     WidthAndHeightSliceArgs,
@@ -65,7 +66,12 @@ class TimeBounds(Enum):
 
 @dataclass
 class ProcessArgs(
-    ConfigFileArgs, MassSliceArgs, WidthAndHeightSliceArgs, LayerSliceArgs, FormulaArgs
+    ConfigFileArgs,
+    MassSliceArgs,
+    WidthAndHeightSliceArgs,
+    LayerSliceArgs,
+    FormulaArgs,
+    MassRangeArgs,
 ):
     in_path: Path = arg_field(
         "-d",
@@ -119,6 +125,10 @@ class ProcessArgs(
         "--mass-decimals",
         doc="The number of decimal places to which to round off the mass vallues.",
         default=5,
+    )
+    mass_bin_width: float = arg_field(
+        doc="The mz width of a mass bin.",
+        default=0.5,
     )
 
     plot_spectra: bool = arg_field(
@@ -182,6 +192,13 @@ class MSInstrumentData:
 
         return masses, intensities, charges
 
+    def get_scan_number(self, scan_index) -> int:
+        return int(self.first_scan_number + scan_index)
+
+    def get_mass_range(self) -> tuple[float, float]:
+        stats = self.raw_file.GetScanStatsForScanNumber(self.first_scan_number)
+        return stats.LowMass, stats.HighMass
+
     def get_scan_times(self) -> np.ndarray:
         return np.array(
             [
@@ -190,25 +207,20 @@ class MSInstrumentData:
             ]
         )
 
-    def get_spectra(self, scan_number: int, decimal_places: int) -> Spectrum:
+    def get_spectra_on_mass(
+        self, scan_number: int, mass_axis: np.ndarray
+    ) -> np.ndarray:
         scan_statistics = ScanStatistics()
         segmentedScan = self.raw_file.GetSegmentedScanFromScanNumber(
             scan_number, scan_statistics
         )
 
-        mass = np.round([p for p in segmentedScan.Positions], decimals=decimal_places)
-        unique_mass = np.unique_inverse(mass)
-
-        spec = np.zeros(unique_mass.values.shape)
-        for ii, inv in enumerate(unique_mass.inverse_indices):
-            spec[inv] += segmentedScan.Intensities[ii]
-
-        return Spectrum(
-            time=scan_statistics.StartTime, mass=unique_mass.values, intensity=spec
+        if segmentedScan.Positions is None:
+            raise IndexError(f"{scan_number} not a valid scan number.")
+        spec, _ = np.histogram(
+            segmentedScan.Positions, bins=mass_axis, weights=segmentedScan.Intensities
         )
-
-    def get_all_spectra(self, decimal_places: int) -> list[Spectrum]:
-        return [self.get_spectra(ii, decimal_places) for ii in self.scan_range()]
+        return spec
 
 
 @dataclass
@@ -281,6 +293,10 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             )
     first_number = lines[0].number
     all_times = []
+    min_mass: None | float = None
+    max_mass: None | float = None
+    min_time: None | float = None
+    max_time: None | float = None
     for ii, line in enumerate(lines):
         lines[ii] = RawLine(line.file, line.number - first_number)
 
@@ -296,17 +312,40 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             exit()
 
         instrument_data = MSInstrumentData(rawFile, 1)
-        all_times.append(instrument_data.get_scan_times())
+        line_times = instrument_data.get_scan_times()
+        tmp_min, tmp_max = instrument_data.get_mass_range()
+        if min_mass is None or max_mass is None or min_time is None or max_time is None:
+            min_mass = tmp_min
+            max_mass = tmp_max
+            min_time = np.min(line_times)
+            max_time = np.max(line_times)
+        else:
+            match args.time_bounds:
+                case TimeBounds.SUBSET:
+                    min_mass = max(min_mass, tmp_min)
+                    max_mass = min(max_mass, tmp_max)
+                    min_time = max(min_time, np.min(line_times))
+                    max_time = min(max_time, np.max(line_times))
+                case TimeBounds.SUPERSET:
+                    min_mass = min(min_mass, tmp_min)
+                    max_mass = max(max_mass, tmp_max)
+                    min_time = min(min_time, np.min(line_times))
+                    max_time = max(max_time, np.max(line_times))
+        all_times.append(line_times)
+    if len(lines) == 0:
+        return
+    assert not (
+        min_mass is None or max_mass is None or min_time is None or max_time is None
+    )
+    if args.use_mass:
+        min_mass = args.start_mass
+        max_mass = args.end_mass
+    mass_count = math.ceil((max_mass - min_mass) / args.mass_bin_width)
+    mass_edges = np.array(
+        [ii * args.mass_bin_width + min_mass for ii in range(mass_count + 1)]
+    )
+    mass_axis = mass_edges[:-1]
 
-    line_starts = np.array([np.min(t) for t in all_times])
-    line_ends = np.array([np.max(t) for t in all_times])
-    match args.time_bounds:
-        case TimeBounds.SUBSET:
-            start_time = np.max(line_starts)
-            end_time = np.min(line_ends)
-        case TimeBounds.SUPERSET:
-            start_time = np.min(line_starts)
-            end_time = np.max(line_ends)
     match args.pixel_metric:
         case PixelMetric.TIME:
             delta_t = args.pixel_width
@@ -315,60 +354,45 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             delta_t = args.pixel_width / args.micron_per_second
             delta_m = args.pixel_width
 
-    time_count = math.ceil((end_time - start_time) / delta_t) + 1
-    x_time_axis = np.array([ii * delta_t + start_time for ii in range(time_count)])
+    time_count = math.ceil((max_time - min_time) / delta_t) + 1
+    x_time_axis = np.array([ii * delta_t + min_time for ii in range(time_count)])
     x_distance_axis = np.array([ii * delta_m for ii in range(time_count)])
     y_distance_axis = np.array([ii * args.micron_per_line for ii in range(len(lines))])
 
     print(f"Reading {len(all_times)} lines.")
     print(
-        f" Output will be between {start_time}s and {end_time}s in {len(x_time_axis)} pixels."
-    )
-    print(
         f" Output will be {x_distance_axis[-1] - x_distance_axis[0]}micron wide and {y_distance_axis[-1] - y_distance_axis[0]} micron high."
     )
     print(
-        f" Mass values will be binned into groups width {math.pow(10, -args.mass_decimal_places)}m/z."
+        f" Output will be between {min_time:.4f} - {max_time:.4f}s, every {delta_t:.4f}s giving {len(x_time_axis)} pixels."
+    )
+    print(
+        f" Mass values will be from {min_mass} - {max_mass}m/z, every {args.mass_bin_width}m/z giving {mass_count} mass bins."
     )
 
-    spectra: list[list[Spectrum]] = []
-    mass_axis = np.array([])
-
-    for ii, line in enumerate(lines):
-        print(line)
-        rawFile = RawFileReaderAdapter.FileFactory(str(lines[ii].file))
-        instrument_data = MSInstrumentData(rawFile, 1)
-        spectra.append(instrument_data.get_all_spectra(args.mass_decimal_places))
-        for spec in spectra[-1]:
-            mass_axis = np.union1d(mass_axis, spec.mass)
-
-    formula_data = args.calculate_formulae_ranges(mass_axis)
-    ic(len(formula_data))
     image = np.zeros((len(x_time_axis), len(lines), len(mass_axis)))
-
     totals = TotalImages(image.shape)
-    formula_images = [
-        MassRangeTotalImage(image.shape, m.start_mass_index, m.stop_mass_index)
-        for m in formula_data
-        if m.mass_index_width > 0
-    ]
-    ic(len(formula_images))
-    all_totals = [totals, *formula_images]
+    formula_data, formula_images = args.get_formulae_filters(image.shape, mass_axis)
+    mass_range_data, mass_images = args.get_mass_filters(image.shape, mass_axis)
+    all_totals = [totals, *formula_images, *mass_images]
 
-    for ll, spectra_in_line in enumerate(spectra):
-        indices = np.array(
-            [inx for inx, t in enumerate(all_times[ll]) if start_time <= t <= end_time]
+    for ll, line in enumerate(lines):
+        rawFile = RawFileReaderAdapter.FileFactory(str(line.file))
+        instrument_data = MSInstrumentData(rawFile, 1)
+
+        line_scan_indices = np.array(
+            [inx for inx, t in enumerate(all_times[ll]) if min_time <= t <= max_time]
         )
-        times = all_times[ll][indices]
-        time_indices = np.searchsorted(x_time_axis, times, side="left")
+        line_times = all_times[ll][line_scan_indices]
+        x_time_axis_indices = np.searchsorted(x_time_axis, line_times, side="left")
 
-        for inx, jj in enumerate(indices):
-            spec = spectra_in_line[jj]
-            int_indices = np.isin(mass_axis, spec.mass, assume_unique=True)
-            tt = time_indices[inx]
-            image[tt, ll, int_indices] += spec.intensity[:]
+        for inx, scan_inx in enumerate(line_scan_indices):
+            tt = x_time_axis_indices[inx]
+            scan_number = instrument_data.get_scan_number(scan_inx)
+            spec = instrument_data.get_spectra_on_mass(scan_number, mass_edges)
+            image[tt, ll, :] += spec[:]
             for total in all_totals:
-                total.add_spectra(tt, ll, image[tt, ll, :])
+                total.add_spectra(tt, ll, spec[:])
 
     layer_slice = args.calculate_layer_slice(1)
     width_slice, height_slice = args.calculate_width_and_height_slice(
@@ -523,24 +547,12 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             )
         )
 
-    for fd, fi in zip(formula_data, formula_images):
-        filename = f"{args.nxs_out_path.stem}.{fd.formula}.png"
-        title = f"{args.nxs_out_path.stem}: {fd.formula}"
-        ic(filename)
+    args.plot_formulae_ranges(
+        mass_axis, formula_data, formula_images, args.nxs_out_path, isp_config
+    )
 
-        isp_config.plot_axes_commands_and_kw_args.update(
-            dict(axvline=dict(x=fd.mass, linewidth=0.5, linestyle=":"))
-        )
+    args.plot_mass_ranges(
+        mass_axis, mass_range_data, mass_images, args.nxs_out_path, isp_config
+    )
 
-        spec_slice = slice(fd.start_mass_index, fd.stop_mass_index)
-        nxisp.process(
-            nxisp.ProcessArgs(
-                title,
-                mass_axis[spec_slice],
-                totals.total_spectrum[spec_slice],
-                fi.total_image,
-                Path(*path_parts[:-1], filename),
-                plot_args=isp_config,
-            )
-        )
     print("Done plotting")
