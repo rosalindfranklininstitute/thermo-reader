@@ -23,7 +23,9 @@ clr.AddReference(
     )
 )
 
-from System import Enum, Environment
+import datetime as dt
+
+from System import Enum, Environment, DateTime
 from System.Collections.Generic import List
 
 from ThermoFisher.CommonCore.Data import ToleranceUnits
@@ -55,6 +57,18 @@ from icecream import ic
 
 def is_os_windows():
     return "Windows" in str(Environment.OSVersion)
+
+
+def to_py_datetime(cs_datetime: DateTime) -> dt.datetime:
+    return dt.datetime(
+        year=cs_datetime.Year,
+        month=cs_datetime.Month,
+        day=cs_datetime.Day,
+        hour=cs_datetime.Hour,
+        minute=cs_datetime.Minute,
+        second=cs_datetime.Second,
+        microsecond=cs_datetime.Millisecond * 1000 + cs_datetime.Microsecond,
+    )
 
 
 def ListTrailerExtraFields(rawFile):

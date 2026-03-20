@@ -6,9 +6,13 @@ from typing import Any, NamedTuple, Literal
 from enum import Enum
 from dataclasses import dataclass
 import math
+import os
 
 import numpy as np
-import random
+
+import h5py
+from colorama import just_fix_windows_console, Fore, Style
+
 
 from ms_nexus_tools.api import (
     image_plot as nxtic,
@@ -44,14 +48,15 @@ import matplotlib.pyplot as plt
 from .load_thermo import (
     RawFileReaderAdapter,
     Device,
-    DataUnits,
-    GetSpectrum,
-    IScanFilter,
     IRawDataExtended,
     ScanStatistics,
+    ListTrailerExtraFields,
+    to_py_datetime,
 )
 
 from icecream import ic
+
+just_fix_windows_console()
 
 
 class PixelMetric(Enum):
@@ -90,8 +95,8 @@ class ProcessArgs(
         default=None,
     )
 
-    ignore_prefix: str = arg_field(
-        doc="A prefix to ignore on the filenames.", default=""
+    filename_prefix: str = arg_field(
+        doc="A prefix to ignore on the filenames.", default=None
     )
 
     pixel_width: float = arg_field(
@@ -121,14 +126,16 @@ class ProcessArgs(
         default=1.0,
     )
 
-    mass_decimal_places: int = arg_field(
-        "--mass-decimals",
-        doc="The number of decimal places to which to round off the mass vallues.",
-        default=5,
-    )
     mass_bin_width: float = arg_field(
-        doc="The mz width of a mass bin.",
-        default=0.5,
+        doc="The mz width of a mass bin. If not specified will use the value stored inthee raw files.",
+        default=None,
+    )
+
+    write_unidec: bool = arg_field(
+        "--no-write-unidec",
+        arg_type=ArgType.EXPLICIT_ONLY,
+        action="store_false",
+        doc="If present will not write out the total spectra and line spectra to a format UniDec can read.",
     )
 
     plot_spectra: bool = arg_field(
@@ -175,6 +182,9 @@ class MSInstrumentData:
             self.first_scan_number
         )
 
+    def stored_mass_resolution(self) -> float:
+        return self.raw_file.RunHeaderEx.MassResolution
+
     def is_centroid_scan(self):
         return self.first_scan_statistics.IsCentroidScan
 
@@ -202,14 +212,14 @@ class MSInstrumentData:
     def get_scan_times(self) -> np.ndarray:
         return np.array(
             [
-                self.raw_file.GetScanStatsForScanNumber(ii).StartTime
+                self.raw_file.GetScanStatsForScanNumber(ii).StartTime * 60
                 for ii in self.scan_range()
             ]
         )
 
     def get_spectra_on_mass(
         self, scan_number: int, mass_axis: np.ndarray
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, int]:
         scan_statistics = ScanStatistics()
         segmentedScan = self.raw_file.GetSegmentedScanFromScanNumber(
             scan_number, scan_statistics
@@ -220,7 +230,7 @@ class MSInstrumentData:
         spec, _ = np.histogram(
             segmentedScan.Positions, bins=mass_axis, weights=segmentedScan.Intensities
         )
-        return spec
+        return spec, len(segmentedScan.Intensities)
 
 
 @dataclass
@@ -261,6 +271,18 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     digits = re.compile("\\d+")
     error = False
     lines: list[RawLine] = []
+    if args.filename_prefix is None:
+        paths = []
+        for fle in args.in_path.iterdir():
+            if not fle.is_file():
+                continue
+            if fle.suffix.lower() != ".raw":
+                continue
+            paths.append(fle.name)
+        filename_prefix = os.path.commonprefix(paths)
+    else:
+        filename_prefix = args.filename_prefix
+
     for fle in args.in_path.iterdir():
         if not fle.is_file():
             continue
@@ -268,8 +290,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             continue
 
         parts = [
-            int(num)
-            for num in digits.findall(fle.name.removeprefix(args.ignore_prefix))
+            int(num) for num in digits.findall(fle.name.removeprefix(filename_prefix))
         ]
         if len(parts) != 1:
             if len(parts) == 0:
@@ -297,6 +318,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     max_mass: None | float = None
     min_time: None | float = None
     max_time: None | float = None
+    mass_resolution: None | float = None
     for ii, line in enumerate(lines):
         lines[ii] = RawLine(line.file, line.number - first_number)
 
@@ -314,11 +336,18 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
         instrument_data = MSInstrumentData(rawFile, 1)
         line_times = instrument_data.get_scan_times()
         tmp_min, tmp_max = instrument_data.get_mass_range()
-        if min_mass is None or max_mass is None or min_time is None or max_time is None:
+        if (
+            min_mass is None
+            or max_mass is None
+            or min_time is None
+            or max_time is None
+            or mass_resolution is None
+        ):
             min_mass = tmp_min
             max_mass = tmp_max
             min_time = np.min(line_times)
             max_time = np.max(line_times)
+            mass_resolution = instrument_data.stored_mass_resolution()
         else:
             match args.time_bounds:
                 case TimeBounds.SUBSET:
@@ -331,7 +360,19 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
                     max_mass = max(max_mass, tmp_max)
                     min_time = min(min_time, np.min(line_times))
                     max_time = max(max_time, np.max(line_times))
+            mass_resolution = min(
+                mass_resolution, instrument_data.stored_mass_resolution()
+            )
         all_times.append(line_times)
+
+    time_percentiles = np.percentile(
+        [np.percentile(np.diff(line_times), [0, 50, 100]) for line_times in all_times],
+        [0, 50, 100],
+        axis=0,
+    )
+    time_percentiles = np.array([time_percentiles[ii, ii] for ii in range(3)])
+    scan_percentiles = np.percentile([len(lt) for lt in all_times], [0, 50, 100])
+
     if len(lines) == 0:
         return
     assert not (
@@ -340,9 +381,12 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     if args.use_mass:
         min_mass = args.start_mass
         max_mass = args.end_mass
-    mass_count = math.ceil((max_mass - min_mass) / args.mass_bin_width)
+    if args.mass_bin_width is not None:
+        mass_resolution = args.mass_bin_width
+    assert mass_resolution is not None
+    mass_count = math.ceil((max_mass - min_mass) / mass_resolution)
     mass_edges = np.array(
-        [ii * args.mass_bin_width + min_mass for ii in range(mass_count + 1)]
+        [ii * mass_resolution + min_mass for ii in range(mass_count + 1)]
     )
     mass_axis = mass_edges[:-1]
 
@@ -359,23 +403,54 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     x_distance_axis = np.array([ii * delta_m for ii in range(time_count)])
     y_distance_axis = np.array([ii * args.micron_per_line for ii in range(len(lines))])
 
-    print(f"Reading {len(all_times)} lines.")
+    print(f"Reading {len(all_times)} lines:")
+    print(Style.DIM, end="")
+    print(Fore.CYAN, end="")
+    for line in lines:
+        print(f"   {line.file.name}")
+    print(Style.RESET_ALL, end="")
+
     print(
         f" Output will be {x_distance_axis[-1] - x_distance_axis[0]}micron wide and {y_distance_axis[-1] - y_distance_axis[0]} micron high."
     )
     print(
-        f" Output will be between {min_time:.4f} - {max_time:.4f}s, every {delta_t:.4f}s giving {len(x_time_axis)} pixels."
+        f" Output will be between {min_time:.2f} - {max_time:.2f}s, every {delta_t:.4f}s giving {len(x_time_axis)} pixels."
     )
     print(
-        f" Mass values will be from {min_mass} - {max_mass}m/z, every {args.mass_bin_width}m/z giving {mass_count} mass bins."
+        f"   ({min_time / 60:.4f} - {max_time / 60:.4f}min, Approximate scan times: min {time_percentiles[0]:.2f}s, median {time_percentiles[1]:.2f}s, max {time_percentiles[2]:.2f}s)"
+    )
+    print(
+        f"   (Actual scan count: min {int(scan_percentiles[0])}, median {int(scan_percentiles[1])}, max {int(scan_percentiles[2])})"
+    )
+    if len(x_time_axis) > scan_percentiles[2]:
+        print(
+            Style.BRIGHT
+            + Fore.YELLOW
+            + "WARNING: "
+            + Style.NORMAL
+            + "The pixel width may be set incorrectly:"
+        )
+        print(
+            f"    The number of pixels requested ({len(x_time_axis)}) is greater than the higest resolution line (with {scan_percentiles[2]} scans)"
+        )
+        print(
+            "    This will result in each scan being in only one pixel with surrounding enpty pixels.",
+            Style.RESET_ALL,
+        )
+
+    print(
+        f" Mass values will be from {min_mass} - {max_mass}m/z, every {mass_resolution}m/z giving {mass_count} mass bins."
     )
 
     image = np.zeros((len(x_time_axis), len(lines), len(mass_axis)))
+    if args.write_unidec:
+        line_spectra = np.zeros((len(lines), len(mass_axis)))
     totals = TotalImages(image.shape)
     formula_data, formula_images = args.get_formulae_filters(image.shape, mass_axis)
     mass_range_data, mass_images = args.get_mass_filters(image.shape, mass_axis)
     all_totals = [totals, *formula_images, *mass_images]
 
+    all_lengths = []
     for ll, line in enumerate(lines):
         rawFile = RawFileReaderAdapter.FileFactory(str(line.file))
         instrument_data = MSInstrumentData(rawFile, 1)
@@ -389,10 +464,34 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
         for inx, scan_inx in enumerate(line_scan_indices):
             tt = x_time_axis_indices[inx]
             scan_number = instrument_data.get_scan_number(scan_inx)
-            spec = instrument_data.get_spectra_on_mass(scan_number, mass_edges)
+            spec, scan_length = instrument_data.get_spectra_on_mass(
+                scan_number, mass_edges
+            )
+            all_lengths.append(scan_length)
             image[tt, ll, :] += spec[:]
+            if args.write_unidec:
+                line_spectra[ll] += spec[:]
             for total in all_totals:
                 total.add_spectra(tt, ll, spec[:])
+    bin_percentiles = np.percentile(all_lengths, [0, 50, 100])
+    print(
+        f"   (Actual bin counts: min {bin_percentiles[0]}, median {bin_percentiles[1]}, max {bin_percentiles[2]})"
+    )
+    if mass_count > bin_percentiles[2]:
+        print(
+            Style.BRIGHT
+            + Fore.YELLOW
+            + "WARNING: "
+            + Style.NORMAL
+            + "The mass resolution may be set incorrectly:"
+        )
+        print(
+            f"    The number of bins requested ({mass_count}) was greater than the higest resolution line (with {bin_percentiles[2]} mass bins)"
+        )
+        print(
+            "    This will result in each mass being in only one pixel with surrounding enpty pixels.",
+            Style.RESET_ALL,
+        )
 
     layer_slice = args.calculate_layer_slice(1)
     width_slice, height_slice = args.calculate_width_and_height_slice(
@@ -504,12 +603,46 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
         total_spectra.data.signal[0] = totals.total_spectrum[spectra_slice]
         total_images.data.signal[0] = totals.total_image[width_slice, height_slice]
 
+    path_parts = args.nxs_out_path.parts
+    if args.write_unidec:
+        total_spectra_data = np.array(
+            [mass_values, totals.total_spectrum[spectra_slice]]
+        ).T
+        filename = f"{args.nxs_out_path.stem}.ts.txt"
+        np.savetxt(Path(*path_parts[:-1], filename), total_spectra_data)
+        filename = f"{args.nxs_out_path.stem}.unidec.hdf5"
+        with h5py.File(Path(*path_parts[:-1], filename), "w") as fle:
+            dataset = fle.create_group("ms_dataset")
+            dataset.attrs["num"] = len(lines)
+            dataset.attrs["num"] = len(lines)
+            dataset.attrs["v1name"] = "Variable 1"
+            dataset.attrs["v2name"] = "Variable 2"
+            for ll in range(len(lines)):
+                line_dataset = fle.create_group(f"ms_dataset/{ll}")
+                line_dataset.attrs["name"] = lines[ii].file.name
+                # line_dataset.attrs["v1name"] = []
+                # line_dataset.attrs["v2name"] = []
+                raw_line = np.sum(image[:, ll, spectra_slice], axis=0)
+                line_stats = np.percentile(raw_line, [0, 100])
+                normal_line = (raw_line - line_stats[0]) / (
+                    line_stats[1] - line_stats[0]
+                )
+                line_dataset.create_dataset(
+                    name="raw_data",
+                    data=np.array([mass_values, raw_line[:]]).T,
+                    chunks=(len(mass_values), 2),
+                )
+                line_dataset.create_dataset(
+                    name="processed_data",
+                    data=np.array([mass_values, normal_line[:]]).T,
+                    chunks=(len(mass_values), 2),
+                )
+
     print("Plotting:")
     tic_config = nxtic.PlotKwArgs.read_config(config, "total_ion_count")
     ts_config = nxts.PlotKwArgs.read_config(config, "total_spectra")
     kdm_config = nxkdm.PlotKwArgs.read_config(config, "kendrick_mass_defect")
     isp_config = nxisp.PlotKwArgs.read_config(config, "calibration_plot")
-    path_parts = args.nxs_out_path.parts
     title = f"{args.nxs_out_path.stem} "
     if args.plot_tic:
         filename = f"{args.nxs_out_path.stem}.tic.png"
