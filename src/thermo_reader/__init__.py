@@ -8,6 +8,7 @@ import os
 import argparse
 
 from . import thermo
+from . import collect_figs
 
 from pathlib import Path
 
@@ -24,3 +25,15 @@ def main():
     process_args = thermo.ProcessArgs(**vars(args))
 
     thermo.process(process_args, config_dict)
+
+
+def images():
+    parser = argparse.ArgumentParser(prog="figs")
+
+    nxargs.add_arguments(parser, collect_figs.ProcessArgs)
+
+    args, config_dict = collect_figs.ProcessArgs.parse_args(parser)
+
+    process_args = collect_figs.ProcessArgs(**vars(args))
+
+    collect_figs.process(process_args, config_dict)

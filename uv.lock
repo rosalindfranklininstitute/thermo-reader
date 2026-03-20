@@ -748,6 +748,7 @@ dependencies = [
     { name = "icecream" },
     { name = "ms-nexus-tools" },
     { name = "pythonnet" },
+    { name = "scipy" },
 ]
 
 [package.dev-dependencies]
@@ -762,6 +763,7 @@ requires-dist = [
     { name = "icecream", specifier = ">=2.1.10" },
     { name = "ms-nexus-tools", editable = "../ms-nexus-tools" },
     { name = "pythonnet", specifier = ">=3.0.5" },
+    { name = "scipy", specifier = ">=1.17.1" },
 ]
 
 [package.metadata.requires-dev]

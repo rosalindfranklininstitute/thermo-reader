@@ -15,4 +15,5 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+build/
 

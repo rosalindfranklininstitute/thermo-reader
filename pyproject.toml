@@ -17,12 +17,14 @@ dependencies = [
     "icecream>=2.1.10",
     "ms-nexus-tools",
     "pythonnet>=3.0.5",
+    "scipy>=1.17.1",
 ]
 license = 'Apache-2.0 AND LicenseRef-RawFileReader-reading-tool'
 license-files = ["LICENSES/*"]
 
 [project.scripts]
 main = "thermo_reader:main"
+images = "thermo_reader:images"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
