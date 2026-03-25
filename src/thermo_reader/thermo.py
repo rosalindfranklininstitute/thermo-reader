@@ -21,6 +21,8 @@ from ms_nexus_tools.api import (
     kendrick_mass_defect_plot as nxkdm,
 )
 from ms_nexus_tools.api.args import arg_field, ArgType, ConfigFileArgs
+from ms_nexus_tools.api.args import InteractiveArgs
+
 from ms_nexus_tools.api.formula_args import FormulaArgs
 from ms_nexus_tools.api.mass_range_args import MassRangeArgs
 from ms_nexus_tools.api.image_args import (
@@ -71,6 +73,7 @@ class TimeBounds(Enum):
 
 @dataclass
 class ProcessArgs(
+    InteractiveArgs,
     ConfigFileArgs,
     MassSliceArgs,
     WidthAndHeightSliceArgs,

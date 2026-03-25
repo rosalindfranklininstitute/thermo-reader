@@ -17,7 +17,6 @@ dependencies = [
     "icecream>=2.1.10",
     "ms-nexus-tools",
     "pythonnet>=3.0.5",
-    "scipy>=1.17.1",
 ]
 license = "Apache-2.0 AND LicenseRef-RawFileReader-reading-tool"
 license-files = ["LICENSES/*"]
