@@ -13,6 +13,7 @@ authors = [
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "colorama>=0.4.6",
+    "datargs",
     "h5py>=3.16.0",
     "icecream>=2.1.10",
     "ms-nexus-tools",
@@ -31,6 +32,7 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 ms-nexus-tools = { path = "../ms-nexus-tools", editable = true }
+datargs = { path = "../datargs", editable = true }
 
 [dependency-groups]
 dev = [

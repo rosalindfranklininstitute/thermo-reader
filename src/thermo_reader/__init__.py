@@ -11,7 +11,7 @@ from . import thermo
 
 from pathlib import Path
 
-from ms_nexus_tools.api import args as nxargs
+import datargs as nxargs
 
 
 def main():

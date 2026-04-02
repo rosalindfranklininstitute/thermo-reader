@@ -20,8 +20,7 @@ from ms_nexus_tools.api import (
     image_and_spectrum_plot as nxisp,
     kendrick_mass_defect_plot as nxkdm,
 )
-from ms_nexus_tools.api.args import arg_field, ArgType, ConfigFileArgs
-from ms_nexus_tools.api.args import InteractiveArgs
+from datargs import arg_field, ArgType, ConfigFileArgs, InteractiveArgs
 
 from ms_nexus_tools.api.formula_args import FormulaArgs
 from ms_nexus_tools.api.mass_range_args import MassRangeArgs
@@ -38,7 +37,7 @@ from ms_nexus_tools.lib.nxs import (
     create_group,
     GenericAxis,
     Axis,
-    create_chunked_subentry,
+    create_standard_file,
 )
 
 
@@ -78,8 +77,6 @@ class ProcessArgs(
     MassSliceArgs,
     WidthAndHeightSliceArgs,
     LayerSliceArgs,
-    FormulaArgs,
-    MassRangeArgs,
 ):
     in_path: Path = arg_field(
         "-d",
@@ -139,25 +136,6 @@ class ProcessArgs(
         arg_type=ArgType.EXPLICIT_ONLY,
         action="store_false",
         doc="If present will not write out the total spectra and line spectra to a format UniDec can read.",
-    )
-
-    plot_spectra: bool = arg_field(
-        "--no-plot-spec",
-        arg_type=ArgType.EXPLICIT_ONLY,
-        action="store_false",
-        doc="If present will not plot the Total Spectra per layer.",
-    )
-    plot_tic: bool = arg_field(
-        "--no-plot-tic",
-        arg_type=ArgType.EXPLICIT_ONLY,
-        action="store_false",
-        doc="If present will not plot the Total Ion Count per layer.",
-    )
-    plot_kdm: bool = arg_field(
-        "--no-plot-kfm",
-        arg_type=ArgType.EXPLICIT_ONLY,
-        action="store_false",
-        doc="If present will not plot the Kendrick Mass Defect per layer.",
     )
 
 
@@ -306,6 +284,8 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     if error:
         raise RuntimeError("Could not parse all filenames")
 
+    print(f"Inspecting {len(lines)} files.")
+
     lines.sort(key=lambda x: x.number)
 
     array = np.array([line.number for line in lines])
@@ -381,12 +361,10 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     assert not (
         min_mass is None or max_mass is None or min_time is None or max_time is None
     )
-    if args.use_mass:
-        min_mass = args.start_mass
-        max_mass = args.end_mass
     if args.mass_bin_width is not None:
         mass_resolution = args.mass_bin_width
     assert mass_resolution is not None
+    ic(max_mass, min_mass)
     mass_count = math.ceil((max_mass - min_mass) / mass_resolution)
     mass_edges = np.array(
         [ii * mass_resolution + min_mass for ii in range(mass_count + 1)]
@@ -449,9 +427,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     if args.write_unidec:
         line_spectra = np.zeros((len(lines), len(mass_axis)))
     totals = TotalImages(image.shape)
-    formula_data, formula_images = args.get_formulae_filters(image.shape, mass_axis)
-    mass_range_data, mass_images = args.get_mass_filters(image.shape, mass_axis)
-    all_totals = [totals, *formula_images, *mass_images]
+    all_totals = [totals]
 
     all_lengths = []
     for ll, line in enumerate(lines):
@@ -503,18 +479,6 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     spectra_slice = args.calculate_mass_slice(mass_axis)
     mass_values = mass_axis[spectra_slice]
 
-    cbounds = ContainedBounds.from_chunk(
-        outer_shape=(1, *image.shape),
-        inner_chunk=Chunk(
-            [
-                layer_slice,
-                width_slice,
-                height_slice,
-                spectra_slice,
-            ]
-        ),
-    )
-
     axes = GenericAxis(
         [
             [
@@ -547,69 +511,52 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
         ]
     )
 
-    nxs = NexusFile(args.nxs_out_path, mode="w")
+    data_shape = (1, *image.shape)
+    out_chunk = Chunk(
+        [
+            layer_slice,
+            width_slice,
+            height_slice,
+            spectra_slice,
+        ]
+    )
+
+    min_items_per_chunk = 256 * 1024  # 1Kb
+    (
+        cbounds,
+        (spectra_chunks, total_spectra_chunks, image_chunks, total_image_chunks),
+    ) = create_standard_file(
+        data_shape,
+        out_chunk,
+        args.nxs_out_path,
+        axes=axes,
+        min_items_per_chunk=min_items_per_chunk,
+    )
+
+    nxs = NexusFile(args.nxs_out_path, mode="a")
     with nxs.as_context():
-        min_items_per_chunk = 46000
-
-        spectra_chunks, spectra = create_chunked_subentry(
-            nxs,
-            "spectra",
-            min_items_per_chunk=min_items_per_chunk,
-            memory_shape=cbounds.outer_shape,
-            data_shape=cbounds.inner_shape,
-            priorities=(3, 2, 2, 1),
-            axes=axes,
-        )
-
-        total_spectra_chunks, total_spectra = create_chunked_subentry(
-            nxs,
-            "total_spectra",
-            min_items_per_chunk=min_items_per_chunk,
-            memory_shape=(cbounds.inner_shape[0], cbounds.inner_shape[3]),
-            data_shape=(cbounds.inner_shape[0], cbounds.inner_shape[3]),
-            priorities=(2, 1),
-            axes=GenericAxis([axes[0], axes[3]]),
-        )
-
-        image_chunks, images = create_chunked_subentry(
-            nxs,
-            "images",
-            min_items_per_chunk=min_items_per_chunk,
-            memory_shape=cbounds.outer_shape,
-            data_shape=cbounds.inner_shape,
-            priorities=(3, 1, 1, 2),
-            axes=axes,
-        )
-
-        total_image_chunks, total_images = create_chunked_subentry(
-            nxs,
-            "total_ion_count",
-            min_items_per_chunk=min_items_per_chunk,
-            memory_shape=(
-                cbounds.inner_shape[0],
-                cbounds.inner_shape[1],
-                cbounds.inner_shape[2],
-            ),
-            data_shape=(
-                cbounds.inner_shape[0],
-                cbounds.inner_shape[1],
-                cbounds.inner_shape[2],
-            ),
-            priorities=(2, 1, 1),
-            axes=GenericAxis([axes[0], axes[1], axes[2]]),
-        )
-
         print("Writing data:")
-        spectra.data.signal[0, :] = image[width_slice, height_slice, spectra_slice]
-        images.data.signal[0, :] = image[width_slice, height_slice, spectra_slice]
+        nxs.root.spectra.data.signal[0, :] = image[
+            width_slice, height_slice, spectra_slice
+        ]
+        nxs.root.images.data.signal[0, :] = image[
+            width_slice, height_slice, spectra_slice
+        ]
 
-        total_spectra.data.signal[0] = totals.total_spectrum[spectra_slice]
-        total_images.data.signal[0] = totals.total_image[width_slice, height_slice]
+        nxs.root.total_spectra.data.signal[0, 0] = totals.tic_spectrum[spectra_slice]
+        nxs.root.total_images.data.signal[0, 0] = totals.tic_image[
+            width_slice, height_slice
+        ]
+
+        nxs.root.total_spectra.data.signal[1, 0] = totals.max_spectrum[spectra_slice]
+        nxs.root.total_images.data.signal[1, 0] = totals.max_image[
+            width_slice, height_slice
+        ]
 
     path_parts = args.nxs_out_path.parts
     if args.write_unidec:
         total_spectra_data = np.array(
-            [mass_values, totals.total_spectrum[spectra_slice]]
+            [mass_values, totals.tic_spectrum[spectra_slice]]
         ).T
         filename = f"{args.nxs_out_path.stem}.ts.txt"
         np.savetxt(Path(*path_parts[:-1], filename), total_spectra_data)
@@ -623,8 +570,6 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             for ll in range(len(lines)):
                 line_dataset = fle.create_group(f"ms_dataset/{ll}")
                 line_dataset.attrs["name"] = lines[ii].file.name
-                # line_dataset.attrs["v1name"] = []
-                # line_dataset.attrs["v2name"] = []
                 raw_line = np.sum(image[:, ll, spectra_slice], axis=0)
                 line_stats = np.percentile(raw_line, [0, 100])
                 normal_line = (raw_line - line_stats[0]) / (
@@ -640,55 +585,3 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
                     data=np.array([mass_values, normal_line[:]]).T,
                     chunks=(len(mass_values), 2),
                 )
-
-    print("Plotting:")
-    tic_config = nxtic.PlotKwArgs.read_config(config, "total_ion_count")
-    ts_config = nxts.PlotKwArgs.read_config(config, "total_spectra")
-    kdm_config = nxkdm.PlotKwArgs.read_config(config, "kendrick_mass_defect")
-    isp_config = nxisp.PlotKwArgs.read_config(config, "calibration_plot")
-    title = f"{args.nxs_out_path.stem} "
-    if args.plot_tic:
-        filename = f"{args.nxs_out_path.stem}.tic.png"
-        nxtic.process(
-            nxtic.ProcessArgs(
-                title,
-                totals.total_image,
-                Path(*path_parts[:-1], filename),
-                plot_args=tic_config,
-            )
-        )
-
-    if args.plot_spectra:
-        filename = f"{args.nxs_out_path.stem}.ts.png"
-        nxts.process(
-            nxts.ProcessArgs(
-                title,
-                mass_axis,
-                totals.total_spectrum,
-                Path(*path_parts[:-1], filename),
-                plot_args=ts_config,
-            )
-        )
-
-    if args.plot_kdm:
-        filename = f"{args.nxs_out_path.stem}.kdm.png"
-        nxkdm.process(
-            nxkdm.ProcessArgs(
-                title,
-                mass_axis,
-                totals.total_spectrum,
-                Path(*path_parts[:-1], filename),
-                normalisation=nxkdm.Normalisation.QUADRATIC,
-                plot_args=kdm_config,
-            )
-        )
-
-    args.plot_formulae_ranges(
-        mass_axis, formula_data, formula_images, args.nxs_out_path, isp_config
-    )
-
-    args.plot_mass_ranges(
-        mass_axis, mass_range_data, mass_images, args.nxs_out_path, isp_config
-    )
-
-    print("Done plotting")
