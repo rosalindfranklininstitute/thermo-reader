@@ -4,8 +4,8 @@
 
 [project]
 name = "thermo-reader"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.1"
+description = "A tool for reading thermo Raw files and converting them to varius formats."
 readme = "README.md"
 authors = [
     { name = "Duncan McDougall", email = "duncan.mcdougall@rfi.ac.uk" }
