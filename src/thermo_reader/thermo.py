@@ -19,13 +19,13 @@ from ms_nexus_tools.api import (
     spectrum_plot as nxts,
     image_and_spectrum_plot as nxisp,
     kendrick_mass_defect_plot as nxkdm,
+    imzml as nxml,
 )
 from datargs import arg_field, ArgType, ConfigFileArgs, InteractiveArgs
 
 from ms_nexus_tools.api.formula_args import FormulaArgs
 from ms_nexus_tools.api.mass_range_args import MassRangeArgs
 from ms_nexus_tools.api.image_args import (
-    LayerSliceArgs,
     WidthAndHeightSliceArgs,
     MassSliceArgs,
 )
@@ -76,7 +76,6 @@ class ProcessArgs(
     ConfigFileArgs,
     MassSliceArgs,
     WidthAndHeightSliceArgs,
-    LayerSliceArgs,
 ):
     in_path: Path = arg_field(
         "-d",
@@ -136,6 +135,13 @@ class ProcessArgs(
         arg_type=ArgType.EXPLICIT_ONLY,
         action="store_false",
         doc="If present will not write out the total spectra and line spectra to a format UniDec can read.",
+    )
+
+    write_imzml: bool = arg_field(
+        "--no-write-imzml",
+        arg_type=ArgType.EXPLICIT_ONLY,
+        action="store_false",
+        doc="If present will not write out the imzMl file.",
     )
 
 
@@ -472,7 +478,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             Style.RESET_ALL,
         )
 
-    layer_slice = args.calculate_layer_slice(1)
+    layer_slice = slice(0, 1)
     width_slice, height_slice = args.calculate_width_and_height_slice(
         image.shape[0], image.shape[1]
     )
@@ -559,9 +565,9 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             [mass_values, totals.tic_spectrum[spectra_slice]]
         ).T
         filename = f"{args.nxs_out_path.stem}.ts.txt"
-        np.savetxt(Path(*path_parts[:-1], filename), total_spectra_data)
+        np.savetxt(args.nxs_out_path.parent / filename, total_spectra_data)
         filename = f"{args.nxs_out_path.stem}.unidec.hdf5"
-        with h5py.File(Path(*path_parts[:-1], filename), "w") as fle:
+        with h5py.File(args.nxs_out_path.parent / filename, "w") as fle:
             dataset = fle.create_group("ms_dataset")
             dataset.attrs["num"] = len(lines)
             dataset.attrs["num"] = len(lines)
@@ -585,3 +591,11 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
                     data=np.array([mass_values, normal_line[:]]).T,
                     chunks=(len(mass_values), 2),
                 )
+
+    if args.write_imzml:
+        print("Writing imzML:")
+        nxml.process(
+            nxml.ProcessArgs(
+                in_path=args.nxs_out_path, out_path=args.nxs_out_path, one_indexed=True
+            )
+        )

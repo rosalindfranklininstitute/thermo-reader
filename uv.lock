@@ -383,6 +383,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "nexusformat" },
     { name = "numpy" },
+    { name = "pyimzml" },
     { name = "pyside6" },
     { name = "scipy" },
     { name = "tqdm" },
@@ -397,6 +398,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "nexusformat", specifier = ">=2.0.1" },
     { name = "numpy", specifier = ">=2.4.2" },
+    { name = "pyimzml", editable = "../pyimzML" },
     { name = "pyside6", specifier = ">=6.10.2" },
     { name = "scipy", specifier = ">=1.17.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
@@ -548,6 +550,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887", size = 4968631, upload-time = "2025-06-21T13:39:12.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b", size = 1225217, upload-time = "2025-06-21T13:39:07.939Z" },
+]
+
+[[package]]
+name = "pyimzml"
+version = "1.5.5"
+source = { editable = "../pyimzML" }
+dependencies = [
+    { name = "numpy" },
+    { name = "wheezy-template" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy" },
+    { name = "wheezy-template" },
 ]
 
 [[package]]
@@ -803,3 +820,9 @@ sdist = { url = "https://files.pythonhosted.org/packages/09/a9/6ba95a270c6f1fbcd
 wheels = [
     { url = "https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl", hash = "sha256:ee1e4c0e59148062281c49d80b25b67771a127c85fc9676d3be5f243206826bf", size = 78374, upload-time = "2026-02-03T17:35:50.982Z" },
 ]
+
+[[package]]
+name = "wheezy-template"
+version = "3.2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/1d/b4fb6ee3f6a0af54ac26e0425b7947bd7d9ed786a75ca173a40640c25bc6/wheezy_template-3.2.5.tar.gz", hash = "sha256:c7c0bf85af0f70ca2ef4b6ea9a74ef372f73392aa17bea0d885dcba7356d0867", size = 19324, upload-time = "2026-02-18T09:05:21.933Z" }
