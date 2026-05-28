@@ -11,6 +11,7 @@ import os
 import numpy as np
 
 import h5py
+import hdf5plugin
 from colorama import just_fix_windows_console, Fore, Style
 
 
@@ -22,6 +23,7 @@ from ms_nexus_tools.api import (
     imzml as nxml,
 )
 from datargs import arg_field, ArgType, ConfigFileArgs, InteractiveArgs
+from datargs.extra_types import DirPathType, FilePathType
 
 from ms_nexus_tools.api.formula_args import FormulaArgs
 from ms_nexus_tools.api.mass_range_args import MassRangeArgs
@@ -35,9 +37,10 @@ from ms_nexus_tools.lib.filter import Filter, TotalImages, MassRangeTotalImage
 from ms_nexus_tools.lib.nxs import (
     NexusFile,
     create_group,
-    GenericAxis,
-    Axis,
+    NxAxes,
+    NxAxis,
     create_standard_file,
+    FieldOptions,
 )
 
 
@@ -84,6 +87,7 @@ class ProcessArgs(
         arg_type=ArgType.EXPLICIT_ONLY,
         doc="The input directory.",
         default=None,
+        type=DirPathType(must_exist=True),
     )
     nxs_out_path: Path = arg_field(
         "-o",
@@ -92,6 +96,7 @@ class ProcessArgs(
         arg_type=ArgType.EXPLICIT_ONLY,
         doc="The output file.",
         default=None,
+        type=FilePathType(must_exist=False),
     )
 
     filename_prefix: str = arg_field(
@@ -126,7 +131,7 @@ class ProcessArgs(
     )
 
     mass_bin_width: float = arg_field(
-        doc="The mz width of a mass bin. If not specified will use the value stored inthee raw files.",
+        doc="The mz width of a mass bin. If not specified will use the value stored in the raw files.",
         default=None,
     )
 
@@ -142,6 +147,13 @@ class ProcessArgs(
         arg_type=ArgType.EXPLICIT_ONLY,
         action="store_false",
         doc="If present will not write out the imzMl file.",
+    )
+
+    field_options: FieldOptions = FieldOptions(
+        compression=hdf5plugin.Blosc(),
+        compression_opts=None,
+        max_items_per_chunk=2 * 1024 * 1024,
+        shuffle=False,
     )
 
 
@@ -308,6 +320,8 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     min_time: None | float = None
     max_time: None | float = None
     mass_resolution: None | float = None
+
+    print(f"Reading {len(lines)} lines:")
     for ii, line in enumerate(lines):
         lines[ii] = RawLine(line.file, line.number - first_number)
 
@@ -324,7 +338,13 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
 
         instrument_data = MSInstrumentData(rawFile, 1)
         line_times = instrument_data.get_scan_times()
-        tmp_min, tmp_max = instrument_data.get_mass_range()
+        tmp_min_mz, tmp_max_mz = instrument_data.get_mass_range()
+        tmp_min_s = np.min(line_times)
+        tmp_max_s = np.max(line_times)
+        print(
+            f"{Style.DIM}{Fore.CYAN}   {lines[ii].file.name}: {Style.RESET_ALL} ({tmp_min_s / 60: >.4f} - {tmp_max_s / 60: >.4f}min)"
+        )
+
         if (
             min_mass is None
             or max_mass is None
@@ -332,23 +352,23 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
             or max_time is None
             or mass_resolution is None
         ):
-            min_mass = tmp_min
-            max_mass = tmp_max
+            min_mass = tmp_min_mz
+            max_mass = tmp_max_mz
             min_time = np.min(line_times)
             max_time = np.max(line_times)
             mass_resolution = instrument_data.stored_mass_resolution()
         else:
             match args.time_bounds:
                 case TimeBounds.SUBSET:
-                    min_mass = max(min_mass, tmp_min)
-                    max_mass = min(max_mass, tmp_max)
-                    min_time = max(min_time, np.min(line_times))
-                    max_time = min(max_time, np.max(line_times))
+                    min_mass = max(min_mass, tmp_min_mz)
+                    max_mass = min(max_mass, tmp_max_mz)
+                    min_time = max(min_time, tmp_min_s)
+                    max_time = min(max_time, tmp_max_s)
                 case TimeBounds.SUPERSET:
-                    min_mass = min(min_mass, tmp_min)
-                    max_mass = max(max_mass, tmp_max)
-                    min_time = min(min_time, np.min(line_times))
-                    max_time = max(max_time, np.max(line_times))
+                    min_mass = min(min_mass, tmp_min_mz)
+                    max_mass = max(max_mass, tmp_max_mz)
+                    min_time = min(min_time, tmp_min_s)
+                    max_time = max(max_time, tmp_max_s)
             mass_resolution = min(
                 mass_resolution, instrument_data.stored_mass_resolution()
             )
@@ -389,13 +409,6 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     x_time_axis = np.array([ii * delta_t + min_time for ii in range(time_count)])
     x_distance_axis = np.array([ii * delta_m for ii in range(time_count)])
     y_distance_axis = np.array([ii * args.micron_per_line for ii in range(len(lines))])
-
-    print(f"Reading {len(all_times)} lines:")
-    print(Style.DIM, end="")
-    print(Fore.CYAN, end="")
-    for line in lines:
-        print(f"   {line.file.name}")
-    print(Style.RESET_ALL, end="")
 
     print(
         f" Output will be {x_distance_axis[-1] - x_distance_axis[0]}micron wide and {y_distance_axis[-1] - y_distance_axis[0]} micron high."
@@ -485,23 +498,23 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
     spectra_slice = args.calculate_mass_slice(mass_axis)
     mass_values = mass_axis[spectra_slice]
 
-    axes = GenericAxis(
+    axes = NxAxes(
         [
             [
-                Axis.create(
+                NxAxis.create(
                     name="layer",
                     values=np.arange(layer_slice.start, layer_slice.stop, 1),
                     indices=[0],
                 )
             ],
             [
-                Axis.create(
+                NxAxis.create(
                     name="x_dist",
                     values=x_distance_axis,
                     indices=[1],
                     unit="um",
                 ),
-                Axis.create(
+                NxAxis.create(
                     name="x_time",
                     values=x_time_axis,
                     indices=[1],
@@ -509,11 +522,11 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
                 ),
             ],
             [
-                Axis.create(
+                NxAxis.create(
                     name="y_dist", values=y_distance_axis, indices=[2], unit="um"
                 )
             ],
-            [Axis.create(name="mass", values=mass_values, indices=[3])],
+            [NxAxis.create(name="mass", values=mass_values, indices=[3])],
         ]
     )
 
@@ -527,8 +540,11 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
         ]
     )
 
-    min_items_per_chunk = 256 * 1024  # 1Kb
+    if not args.nxs_out_path.parent.exists():
+        args.nxs_out_path.parent.mkdir(parents=True)
+
     (
+        nxs,
         cbounds,
         (spectra_chunks, total_spectra_chunks, image_chunks, total_image_chunks),
     ) = create_standard_file(
@@ -536,10 +552,9 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}):
         out_chunk,
         args.nxs_out_path,
         axes=axes,
-        min_items_per_chunk=min_items_per_chunk,
+        field_options=args.field_options,
     )
 
-    nxs = NexusFile(args.nxs_out_path, mode="a")
     with nxs.as_context():
         print("Writing data:")
         nxs.root.spectra.data.signal[0, :] = image[
