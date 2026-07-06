@@ -1,6 +1,6 @@
 import argparse
-from thermo_reader import main
+from thermo_reader import source
 
 
 if __name__ == "__main__":
-    main()
+    source()

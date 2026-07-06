@@ -34,7 +34,15 @@ build-backend = "uv_build"
 ms-nexus-tools = { path = "../ms-nexus-tools", editable = true }
 datargs = { path = "../datargs", editable = true }
 
+[tool.line_profiler.kernprof]
+line-by-line = true
+verbose = false
+skip-zero = true
+prof-mod = ['./src/thermo_reader/', 'thermo_reader', '../ms-nexus-tools/src/ms_nexus_tools/', 'ms_nexus_tools']
+prof-imports = false
+
 [dependency-groups]
 dev = [
     "pyinstaller>=6.19.0",
+    "line-profiler>=5.0.1",
 ]
