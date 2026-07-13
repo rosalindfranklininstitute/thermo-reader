@@ -34,7 +34,7 @@ from ms_nexus_tools.api.image_args import (
 
 from ms_nexus_tools.lib.bounds import Chunk, Shape
 from ms_nexus_tools.lib.contained_bounds import ContainedBounds
-from ms_nexus_tools.lib.filter import Filter, TotalImages, MassRangeTotalImage
+from ms_nexus_tools.lib.mz_filter import MzFilter, TotalImages, MassRangeTotalImage
 from ms_nexus_tools.lib.nxs import (
     NexusFile,
     create_group,

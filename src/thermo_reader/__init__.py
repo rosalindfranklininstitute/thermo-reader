@@ -37,8 +37,8 @@ def source():
     )
     sampling = SparseSampling(
         downsample_count=10,
-        area_positions=np.array([50, 75, 100]),
-        area_volumes=np.array([75, 20, 5]),
+        area_positions=np.array([100]),
+        area_volumes=np.array([100]),
     )
     process_args.data_source = ThermoDataSource(
         in_path=process_args.in_path.parent,

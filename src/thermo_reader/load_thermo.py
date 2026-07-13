@@ -71,6 +71,18 @@ def to_py_datetime(cs_datetime: DateTime) -> dt.datetime:
     )
 
 
+def inspect(thing):
+    print(f"{thing}")
+    for ss in dir(thing):
+        if len(ss) > 0 and ss[0].isupper() and "_" not in ss:
+            try:
+                value = getattr(thing, ss)
+            except Exception as e:
+                print(f"{ss}: {e}")
+            else:
+                print(f"{ss}: {value}")
+
+
 def ListTrailerExtraFields(rawFile):
     """Reads and reports the trailer extra data fields present in the RAW
     file.

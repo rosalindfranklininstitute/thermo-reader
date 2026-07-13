@@ -1,9 +1,11 @@
 import numpy as np
+import datetime as dt
 
 from .load_thermo import (
     Device,
     IRawDataExtended,
     ScanStatistics,
+    to_py_datetime,
 )
 
 
@@ -15,6 +17,7 @@ class MSInstrumentData:
 
         self.first_scan_number = self.raw_file.RunHeaderEx.FirstSpectrum
         self.last_scan_number = self.raw_file.RunHeaderEx.LastSpectrum
+        self.creatoin_time = to_py_datetime(self.raw_file.CreationDate)
 
         self.first_scan_statistics = rawFile.GetScanStatsForScanNumber(
             self.first_scan_number

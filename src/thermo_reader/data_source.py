@@ -6,21 +6,26 @@ from logging import warning, info
 import re
 import os
 from pathlib import Path
-from ms_nexus_tools.lib.bounds import Shape, Chunk
+import datetime as dt
+
 from typing import Any, Callable, NamedTuple
 import numpy as np
 import numpy.typing as npt
 
 from icecream import ic
 
+from ms_nexus_tools.lib.bounds import Shape, Chunk
+
 from ms_nexus_tools.lib.data_source import (
     AbstractDataSource,
     DataShape,
     Axis,
-    MultiCOO,
     AxisDensity,
 )
 from ms_nexus_tools.lib.sparse_sampling import SparseSampling
+from ms_nexus_tools.lib.multi_coo import (
+    MultiCOO,
+)
 
 from .load_thermo import (
     RawFileReaderAdapter,
@@ -59,6 +64,7 @@ class MinMax:
 class DataLines(NamedTuple):
     lines: list[RawLine]
     scan_times: list[list[float]]
+    scan_dates: list[dt.datetime]
     mass: MinMax
     times: MinMax
     mass_resolution: float
@@ -66,6 +72,7 @@ class DataLines(NamedTuple):
     @staticmethod
     def from_lines(lines: list[RawLine], time_bounds: TimeBounds) -> "DataLines":
         first_number = lines[0].number
+        all_creation_times = []
         all_times = []
         mm_mass: None | MinMax = None
         mm_time: None | MinMax = None
@@ -123,13 +130,21 @@ class DataLines(NamedTuple):
                     mass_resolution, instrument_data.stored_mass_resolution()
                 )
             all_times.append(line_times)
+            all_creation_times.append(instrument_data.creatoin_time)
 
         lines = [ll for ll in lines if not ll.ignore]
 
         if mm_mass is None or mm_time is None or mass_resolution is None:
             raise ValueError(f"No data found in {time_bounds.value} of lines.")
 
-        return DataLines(lines, all_times, mm_mass, mm_time, mass_resolution)
+        return DataLines(
+            lines=lines,
+            scan_times=all_times,
+            scan_dates=all_creation_times,
+            mass=mm_mass,
+            times=mm_time,
+            mass_resolution=mass_resolution,
+        )
 
     def get_line_data(
         self, line_index: int, instrument_index
@@ -137,6 +152,18 @@ class DataLines(NamedTuple):
 
         rawFile = RawFileReaderAdapter.FileFactory(str(self.lines[line_index].file))
         return MSInstrumentData(rawFile, instrument_index), self.scan_times[line_index]
+
+
+def inspect(thing):
+    print(f"{thing}")
+    for ss in dir(thing):
+        if len(ss) > 0 and ss[0].isupper() and "_" not in ss:
+            try:
+                value = getattr(thing, ss)
+            except Exception as e:
+                print(f"{ss}: {e}")
+            else:
+                print(f"{ss}: {value}")
 
 
 class ThermoDataSource(AbstractDataSource):
@@ -188,13 +215,27 @@ class ThermoDataSource(AbstractDataSource):
         self.y_values = np.array(
             [ii * micron_per_line for ii in range(len(self.data_lines.lines))]
         )
-        ic(self.time_values)
-        ic(self.x_values)
 
         self.total_shape = (
             len(self.x_values),
             len(self.y_values),
             len(self.mz_edges) - 1,
+        )
+
+        start = min(self.data_lines.scan_dates)
+        end = max(self.data_lines.scan_dates) + dt.timedelta(
+            seconds=self.data_lines.times.max
+        )
+
+        self.experiment_data = dict(
+            pixel_width=delta_m,
+            pixel_time=delta_t,
+            pixel_height=micron_per_line,
+            creation_date=str(start),
+            end_date=str(end),
+            duration=str(end - start),
+            files=[str(line.file.name) for line in self.data_lines.lines],
+            file_numbers=[line.number for line in self.data_lines.lines],
         )
 
     def __enter__(self):
@@ -263,15 +304,14 @@ class ThermoDataSource(AbstractDataSource):
         """
         Returns a dictionary of values that will be stored as the experiment metadata.
         """
-        # TODO: DMD: what can we do here?
-        return {}
+        return self.experiment_data
 
     def shape(self) -> DataShape:
         """
         Return the shape of the data.
         """
         # TODO: DMD: see if we can find the density.
-        return DataShape(self.total_shape, 0.9)
+        return DataShape(self.total_shape, 1.0)
 
     def signal_type(self) -> npt.DTypeLike:
         """
@@ -282,10 +322,6 @@ class ThermoDataSource(AbstractDataSource):
     def output_chunks(self) -> dict[str, Shape]:
         """
         Returns the names and chunking priorities of the desired output array.
-        For examlpe simple image data (x,y, spectra) with shape (32,32,184000)
-        might produce:
-        'images':   (1,1,2) -> (32,32,1)
-        'spectra':  (2,2,1) -> (1,1,184000)
         """
         return dict(images=(1, 1, 2), spectra=(2, 2, 1))
 
@@ -298,36 +334,25 @@ class ThermoDataSource(AbstractDataSource):
     def axis_definitions(self) -> list[Axis]:
         """
         Returns the axis that should be used when storing the data.
-        For examlpe simple image data (x,y, spectra):
-        axis(0) : Axis('x', 0, [], CONTINUOUS, 'um')
-        axis(1) : Axis('y', 1, [], CONTINUOUS, 'um')
-        If is it continuous:
-        axis(2) : Axis('mz', 2, [], CONTINUOUS, 'mz')
-        if it is only peaks:
-        axis(2) : Axis('mz', 2, [0,1], SPARSE, 'mz')
         """
         return [
             Axis(
                 name="x",
                 primary_axis=0,
-                secondary_axes=[],
                 density=AxisDensity.CONTINUOUS,
                 units="m",
                 dtype=np.float32,
             ),
-            # TODO: Allow supporting multiple continuous axis per dimension
-            # Axis(
-            #     name="time",
-            #     primary_axis=0,
-            #     secondary_axes=[],
-            #     density=AxisDensity.CONTINUOUS,
-            #     units="s",
-            #     dtype=np.float32,
-            # ),
+            Axis(
+                name="time",
+                primary_axis=0,
+                density=AxisDensity.CONTINUOUS,
+                units="s",
+                dtype=np.float32,
+            ),
             Axis(
                 name="y",
                 primary_axis=1,
-                secondary_axes=[],
                 density=AxisDensity.CONTINUOUS,
                 units="m",
                 dtype=np.float32,
@@ -335,8 +360,7 @@ class ThermoDataSource(AbstractDataSource):
             Axis(
                 name="mz",
                 primary_axis=2,
-                secondary_axes=[0, 1],
-                density=AxisDensity.SPARSE,
+                density=AxisDensity.BINNED,
                 units="mz",
                 dtype=np.float32,
             ),
@@ -356,7 +380,7 @@ class ThermoDataSource(AbstractDataSource):
             case _:
                 raise ValueError(f"Unknown continuous axis requested: {axis.name}")
 
-    def sparse_axis_edges(self, axis: Axis) -> np.ndarray:
+    def binned_axis_edges(self, axis: Axis) -> np.ndarray:
         """
         Returns the bin edges used to histogram the given sparse axis.
         This is used for generting the output accumulations accros this axis, if required.
@@ -427,14 +451,18 @@ class ThermoDataSource(AbstractDataSource):
                     np.array([tt, yy, 0]).reshape(3, 1),
                     (1, count),
                 )
-                scan_coords[2, :] = np.arange(0, count)
                 coords.append(scan_coords)
                 data.append(spec)
                 mz_data.append(mass)
                 update(1)
+
+        axis = np.concatenate(mz_data)
+        labels = np.searchsorted(self.mz_edges[1:], axis)
+        labels[labels == self.total_shape[-1]] = self.total_shape[-1] - 1
         final_coords = np.concatenate(coords, axis=1)
+        final_coords[2, :] = labels
         return MultiCOO(
             coords=final_coords,
             signal=np.concatenate(data),
-            axis=[np.concatenate(mz_data)],
+            axis=[axis],
         )
