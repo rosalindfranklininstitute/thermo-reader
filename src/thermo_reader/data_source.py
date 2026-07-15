@@ -29,11 +29,6 @@ from ms_nexus_tools.lib.multi_coo import (
 
 from .load_thermo import (
     RawFileReaderAdapter,
-    Device,
-    IRawDataExtended,
-    ScanStatistics,
-    ListTrailerExtraFields,
-    to_py_datetime,
 )
 
 from .msi_instrument import MSInstrumentData

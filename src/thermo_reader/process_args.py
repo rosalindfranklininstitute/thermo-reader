@@ -54,3 +54,24 @@ class ProcessArgs(
         action="store_false",
         doc="If present will not write out the imzMl file.",
     )
+
+    write_tic: bool = arg_field(
+        "--no-write-tic",
+        arg_type=ArgType.EXPLICIT_ONLY,
+        action="store_false",
+        doc="If present will not write out the tic image file.",
+    )
+
+    down_sampling: int = arg_field(
+        "-n",
+        "--down-sampling",
+        "--downsampling",
+        doc=""" 
+The number of 'mass resolutions' to include in each mass bucket. 
+For instance if the mass is between 2000 and 5000 with a mass 
+resolution of 0.5, there should be 6000 mass bins. 
+If '--down-sample=10', then there will be 600 mass bins in the 
+output file.
+""",
+        default=5,
+    )
