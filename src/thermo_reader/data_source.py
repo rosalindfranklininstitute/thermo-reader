@@ -1,18 +1,20 @@
+# SPDX-FileCopyrightText: 2026 RFI
+#
+# SPDX-License-Identifier: Apache-2.0
 from ms_nexus_tools.lib.dtypes import Float1D32, Int1D32, Int3D32
 import math
 from dataclasses import dataclass
 from enum import Enum
-from logging import warning, info
 import re
 import os
 from pathlib import Path
 import datetime as dt
+import logging
 
 from typing import Any, Callable, NamedTuple
 import numpy as np
 import numpy.typing as npt
 
-from icecream import ic
 
 from ms_nexus_tools.lib.bounds import Shape, Chunk
 
@@ -32,6 +34,8 @@ from .load_thermo import (
 )
 
 from .msi_instrument import MSInstrumentData
+
+logger = logging.getLogger(__name__)
 
 
 class PixelMetric(Enum):
@@ -76,24 +80,24 @@ class DataLines(NamedTuple):
         for ii, line in enumerate(lines):
             lines[ii] = RawLine(line.file, line.number - first_number, False)
 
-            rawFile = RawFileReaderAdapter.FileFactory(str(lines[ii].file))
-            if not rawFile.IsOpen or rawFile.IsError:
+            raw_file = RawFileReaderAdapter.FileFactory(str(lines[ii].file))
+            if not raw_file.IsOpen or raw_file.IsError:
                 raise RuntimeError(
                     "Unable to access the RAW file using the RawFileReader class!"
                 )
-            if rawFile.IsError:
+            if raw_file.IsError:
                 raise IOError(
-                    "Error opening ({}) - {}".format(rawFile.FileError, lines[ii].file)
+                    "Error opening ({}) - {}".format(raw_file.FileError, lines[ii].file)
                 )
-            if rawFile.InAcquisition:
+            if raw_file.InAcquisition:
                 raise IOError(
                     "RAW file still being acquired - {}".format(lines[ii].file)
                 )
 
-            instrument_data = MSInstrumentData(rawFile, 1)
+            instrument_data = MSInstrumentData(raw_file, 1)
             line_times = instrument_data.get_scan_times()
             if len(line_times) == 0:
-                warning(f"{lines[ii].file.name}: -- No data found, ignoring")
+                logger.warning(f"{lines[ii].file.name}: -- No data found, ignoring")
                 lines[ii] = RawLine(lines[ii].file, lines[ii].number, True)
                 continue
 
@@ -101,7 +105,7 @@ class DataLines(NamedTuple):
             mass_resolution = instrument_data.stored_mass_resolution()
             tmp_min_s = np.min(line_times)
             tmp_max_s = np.max(line_times)
-            info(
+            logger.info(
                 f"{lines[ii].file.name}: ({tmp_min_s / 60: >.4f} - {tmp_max_s / 60: >.4f}min)"
             )
 
@@ -145,20 +149,8 @@ class DataLines(NamedTuple):
         self, line_index: int, instrument_index
     ) -> tuple[MSInstrumentData, list[float]]:
 
-        rawFile = RawFileReaderAdapter.FileFactory(str(self.lines[line_index].file))
-        return MSInstrumentData(rawFile, instrument_index), self.scan_times[line_index]
-
-
-def inspect(thing):
-    print(f"{thing}")
-    for ss in dir(thing):
-        if len(ss) > 0 and ss[0].isupper() and "_" not in ss:
-            try:
-                value = getattr(thing, ss)
-            except Exception as e:
-                print(f"{ss}: {e}")
-            else:
-                print(f"{ss}: {value}")
+        raw_file = RawFileReaderAdapter.FileFactory(str(self.lines[line_index].file))
+        return MSInstrumentData(raw_file, instrument_index), self.scan_times[line_index]
 
 
 class ThermoDataSource(AbstractDataSource):
@@ -171,8 +163,9 @@ class ThermoDataSource(AbstractDataSource):
         pixel_width: float,
         micron_per_second: float,
         micron_per_line: float,
-        sampling: SparseSampling = SparseSampling(),
+        sampling: SparseSampling | None = None,
     ):
+        sampling = sampling if sampling is not None else SparseSampling()
 
         filename_prefix = (
             filename_prefix
@@ -283,7 +276,7 @@ class ThermoDataSource(AbstractDataSource):
         diffs = np.diff(array)
         for ii, diff in enumerate(diffs[1:]):
             if diff != diffs[0]:
-                warning(
+                logger.warning(
                     f"The numbers {lines[ii].number} and {lines[ii + 1].number} are not consistently {diffs[0]} apart."
                 )
         return lines
@@ -292,7 +285,8 @@ class ThermoDataSource(AbstractDataSource):
         """
         Returns a dictionary of values that will be stored as the instrament metadata.
         """
-        # TODO: DMD: what can we do here?
+        # TODO @DMD: what can we do here?
+        # https://github.com/orgs/rosalindfranklininstitute/projects/19/views/1?pane=issue&itemId=213504413
         return {}
 
     def experiment_metadata(self) -> dict[str, Any]:
@@ -305,7 +299,6 @@ class ThermoDataSource(AbstractDataSource):
         """
         Return the shape of the data.
         """
-        # TODO: DMD: see if we can find the density.
         return DataShape(self.total_shape, 1.0)
 
     def signal_type(self) -> npt.DTypeLike:
@@ -420,7 +413,6 @@ class ThermoDataSource(AbstractDataSource):
         -> return_data.shape[0:-1] == self.shape() and return_data.shape[-1] = len(fill_axis)+1
 
         """
-
         min_time = self.time_values[memory_chunk[0].start]
         max_time = self.time_values[memory_chunk[0].stop - 1]
 

@@ -45,3 +45,11 @@ dev = [
     "pyinstaller>=6.19.0",
     "line-profiler>=5.0.1",
 ]
+
+[tool.ruff.lint]
+select=['E1', 'E4','E7','E9','F','N','ERA', 'ANN2', 'S', 'BLE', 'B', 'A', 'C4', 'COM', 'ISC', 'ICN', 'LOG', 'PIE','RET', 'SLF','SIM', 'TD', 'ARG', 'PTH', 'FLY', 'NPY', 'PERF', "D2", "TRY", "PT"]
+ignore=["C408", "S311", "PTH123", "NPY002", "D203", "D205", "D212", "B006", "ARG001", "ARG002", "D200", "ANN204", "S101", "TRY003", 'RET504', 'COM812']
+# From some modules: T20 -. Print   
+
+[tool.ruff.lint.per-file-ignores]
+"src/thermo_reader/load_thermo.py" = ["E402", "N802"]

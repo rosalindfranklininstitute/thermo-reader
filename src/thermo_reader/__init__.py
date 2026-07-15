@@ -2,35 +2,21 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import reveal_type, cast
-
-from pathlib import Path
+from typing import cast
 
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
-import datargs as nxargs
-
 from ms_nexus_tools.api import data_convert, imzml
 from ms_nexus_tools.lib.sparse_sampling import SparseSampling
 from ms_nexus_tools.lib import unidec, image, utils
 
-from . import thermo
 from .data_source import ThermoDataSource
 from .process_args import ProcessArgs
 
 
-def main():
-
-    partial_args = thermo.ProcessArgs.parse_config("thermo")
-    process_args = thermo.ProcessArgs.parse_interactive(
-        "thermo", args=partial_args.remaining_args, exclude=["config"]
-    )
-    thermo.process(process_args, partial_args.config)
-
-
-def source():
+def source() -> None:
     partial_args = ProcessArgs.parse_config("thermo")
     process_args = ProcessArgs.parse_interactive(
         "thermo", args=partial_args.remaining_args, exclude=["config"]
@@ -59,7 +45,7 @@ def source():
         file_names = process_args.data_source.experiment_data["files"]
         if not isinstance(file_names, list):
             raise ValueError("Expected 'files' to be a list.")
-        if not all([isinstance(s, str) for s in file_names]):
+        if not all(isinstance(s, str) for s in file_names):
             raise ValueError("Expected 'files' to be a list[str].")
         file_names = cast(list[str], file_names)
 

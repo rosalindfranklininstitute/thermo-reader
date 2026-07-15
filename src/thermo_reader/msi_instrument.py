@@ -1,5 +1,7 @@
+# SPDX-FileCopyrightText: 2026 RFI
+#
+# SPDX-License-Identifier: Apache-2.0
 import numpy as np
-import datetime as dt
 
 from .load_thermo import (
     Device,
@@ -10,8 +12,8 @@ from .load_thermo import (
 
 
 class MSInstrumentData:
-    def __init__(self, rawFile: IRawDataExtended, index):
-        self.raw_file = rawFile
+    def __init__(self, raw_file: IRawDataExtended, index):
+        self.raw_file = raw_file
         self.raw_file.SelectInstrument(Device.MS, index)
         self._data = self.raw_file.GetInstrumentData()
 
@@ -19,14 +21,14 @@ class MSInstrumentData:
         self.last_scan_number = self.raw_file.RunHeaderEx.LastSpectrum
         self.creatoin_time = to_py_datetime(self.raw_file.CreationDate)
 
-        self.first_scan_statistics = rawFile.GetScanStatsForScanNumber(
+        self.first_scan_statistics = self.raw_file.GetScanStatsForScanNumber(
             self.first_scan_number
         )
 
     def stored_mass_resolution(self) -> float:
         return self.raw_file.RunHeaderEx.MassResolution
 
-    def is_centroid_scan(self):
+    def is_centroid_scan(self) -> bool:
         return self.first_scan_statistics.IsCentroidScan
 
     def scan_range(self) -> range:
@@ -35,21 +37,21 @@ class MSInstrumentData:
     def get_centroid_stream(
         self, scan_number: int
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        centroidStream = self.raw_file.GetCentroidStream(scan_number, False)
+        centroid_stream = self.raw_file.GetCentroidStream(scan_number, False)
 
-        masses = np.array([m for m in centroidStream.Masses])
-        intensities = np.array([m for m in centroidStream.Intensities])
-        charges = np.array([m for m in centroidStream.Charges])
+        masses = np.array(list(centroid_stream.Masses))
+        intensities = np.array(list(centroid_stream.Intensities))
+        charges = np.array(list(centroid_stream.Charges))
 
         return masses, intensities, charges
 
     def get_segmented_scan(self, scan_number: int) -> tuple[np.ndarray, np.ndarray]:
         scan_statistics = ScanStatistics()
-        segmentedScan = self.raw_file.GetSegmentedScanFromScanNumber(
+        segmented_scan = self.raw_file.GetSegmentedScanFromScanNumber(
             scan_number, scan_statistics
         )
-        masses = np.array([m for m in segmentedScan.Positions])
-        intensities = np.array([m for m in segmentedScan.Intensities])
+        masses = np.array(list(segmented_scan.Positions))
+        intensities = np.array(list(segmented_scan.Intensities))
 
         return masses, intensities
 
@@ -72,13 +74,13 @@ class MSInstrumentData:
         self, scan_number: int, mass_axis: np.ndarray
     ) -> tuple[np.ndarray, int]:
         scan_statistics = ScanStatistics()
-        segmentedScan = self.raw_file.GetSegmentedScanFromScanNumber(
+        segmented_scan = self.raw_file.GetSegmentedScanFromScanNumber(
             scan_number, scan_statistics
         )
 
-        if segmentedScan.Positions is None:
+        if segmented_scan.Positions is None:
             raise IndexError(f"{scan_number} not a valid scan number.")
         spec, _ = np.histogram(
-            segmentedScan.Positions, bins=mass_axis, weights=segmentedScan.Intensities
+            segmented_scan.Positions, bins=mass_axis, weights=segmented_scan.Intensities
         )
-        return spec, len(segmentedScan.Intensities)
+        return spec, len(segmented_scan.Intensities)

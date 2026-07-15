@@ -1,6 +1,8 @@
+# SPDX-FileCopyrightText: 2026 RFI
+#
+# SPDX-License-Identifier: Apache-2.0
 from dataclasses import dataclass
 from datargs import arg_field, ArgType
-from datargs.extra_types import DirPathType, FilePathType
 from ms_nexus_tools.api import data_convert
 
 from .data_source import PixelMetric, TimeBounds
@@ -21,13 +23,13 @@ class ProcessArgs(
 
     pixel_metric: PixelMetric = arg_field(
         doc="The type metric used to define the width of a pixel.",
-        choices=[t for t in PixelMetric],
+        choices=list(PixelMetric),
         default=PixelMetric.TIME,
     )
 
     time_bounds: TimeBounds = arg_field(
         doc="What timing to use for aligning the lines. Subset: data between the largest start time and the smallest end time will be used, and the rest discarded. Superset: all data will be included from the smallest start tim eto the largest end time. Lines which do not fully span this will have their data padded with zeros.",
-        choices=[t for t in TimeBounds],
+        choices=list(TimeBounds),
         default=TimeBounds.SUBSET,
     )
 

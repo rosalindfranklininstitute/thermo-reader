@@ -2,25 +2,23 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import os
 from pythonnet import load
+from pathlib import Path
 
 load("coreclr")
 import clr
 
-dll_directory = os.path.dirname(__file__)
+dll_directory = Path(__file__).parent
 
-clr.AddReference(os.path.join(dll_directory, "dlls", "ThermoFisher.CommonCore.Data"))
+clr.AddReference(str(Path(dll_directory, "dlls", "ThermoFisher.CommonCore.Data")))
 clr.AddReference(
-    os.path.join(dll_directory, "dlls", "ThermoFisher.CommonCore.RawFileReader")
+    str(Path(dll_directory, "dlls", "ThermoFisher.CommonCore.RawFileReader"))
 )
 clr.AddReference(
-    os.path.join(dll_directory, "dlls", "ThermoFisher.CommonCore.BackgroundSubtraction")
+    str(Path(dll_directory, "dlls", "ThermoFisher.CommonCore.BackgroundSubtraction"))
 )
 clr.AddReference(
-    os.path.join(
-        dll_directory, "dlls", "ThermoFisher.CommonCore.MassPrecisionEstimator"
-    )
+    str(Path(dll_directory, "dlls", "ThermoFisher.CommonCore.MassPrecisionEstimator"))
 )
 
 import datetime as dt
@@ -31,31 +29,33 @@ from System.Collections.Generic import List
 from ThermoFisher.CommonCore.Data import ToleranceUnits
 from ThermoFisher.CommonCore.Data import Extensions
 from ThermoFisher.CommonCore.Data.Business import (
-    ChromatogramSignal,
-    ChromatogramTraceSettings,
-    DataUnits,
-    Device,
-    GenericDataTypes,
-    SampleType,
-    Scan,
-    TraceType,
-    ScanStatistics,
+    ChromatogramSignal as ChromatogramSignal,
+    ChromatogramTraceSettings as ChromatogramTraceSettings,
+    DataUnits as DataUnits,
+    Device as Device,
+    GenericDataTypes as GenericDataTypes,
+    SampleType as SampleType,
+    Scan as Scan,
+    ScanStatistics as ScanStatistics,
+    TraceType as TraceType,
 )
 from ThermoFisher.CommonCore.Data.FilterEnums import IonizationModeType, MSOrderType
 from ThermoFisher.CommonCore.Data.Interfaces import (
-    IChromatogramSettings,
-    IScanEventBase,
-    IScanFilter,
-    RawFileClassification,
-    IRawDataExtended,
+    IChromatogramSettings as IChromatogramSettings,
+    IRawDataExtended as IRawDataExtended,
+    IScanEventBase as IScanEventBase,
+    IScanFilter as IScanFilter,
+    RawFileClassification as RawFileClassification,
 )
-from ThermoFisher.CommonCore.MassPrecisionEstimator import PrecisionEstimate
-from ThermoFisher.CommonCore.RawFileReader import RawFileReaderAdapter
+from ThermoFisher.CommonCore.MassPrecisionEstimator import (
+    PrecisionEstimate as PrecisionEstimate,
+)
+from ThermoFisher.CommonCore.RawFileReader import (
+    RawFileReaderAdapter as RawFileReaderAdapter,
+)
 
-from icecream import ic
 
-
-def is_os_windows():
+def is_os_windows() -> bool:
     return "Windows" in str(Environment.OSVersion)
 
 
@@ -71,64 +71,63 @@ def to_py_datetime(cs_datetime: DateTime) -> dt.datetime:
     )
 
 
-def inspect(thing):
+def inspect(thing) -> None:
     print(f"{thing}")
     for ss in dir(thing):
         if len(ss) > 0 and ss[0].isupper() and "_" not in ss:
             try:
                 value = getattr(thing, ss)
-            except Exception as e:
+            except ValueError as e:
                 print(f"{ss}: {e}")
             else:
                 print(f"{ss}: {value}")
 
 
-def ListTrailerExtraFields(rawFile):
-    """Reads and reports the trailer extra data fields present in the RAW
+def ListTrailerExtraFields(raw_file) -> None:
+    """
+    Reads and reports the trailer extra data fields present in the RAW
     file.
 
     Args:
-        rawFile (IRawDataPlus): the RAW file.
+        raw_file (IRawDataPlus): the RAW file.
     """
-
     # Get the Trailer Extra data fields present in the RAW file
-    trailerFields = rawFile.GetTrailerExtraHeaderInformation()
+    trailer_fields = raw_file.GetTrailerExtraHeaderInformation()
 
     # Display each value
     i = 0
     print("Trailer Extra Data Information:")
 
-    for field in trailerFields:
+    for i, field in enumerate(trailer_fields):
         print(
             "   Field {} = {} storing data of type {}".format(
                 i, field.Label, Enum.GetName(GenericDataTypes, field.DataType)
             )
         )
-        i += 1
 
     print()
 
 
-def GetChromatogram(rawFile, startScan, endScan, outputData):
-    """Reads the base peak chromatogram for the RAW file.
+def GetChromatogram(raw_file, start_scan, end_scan, output_data) -> None:
+    """
+    Reads the base peak chromatogram for the RAW file.
 
     Args:
-        rawFile (IRawDataPlus): the RAW file being read.
-        startScan (int): start scan for the chromatogram.
-        endScan (int): end scan for the chromatogram.
-        outputData (bool): the output data flag.
+        raw_file (IRawDataPlus): the RAW file being read.
+        start_scan (int): start scan for the chromatogram.
+        end_scan (int): end scan for the chromatogram.
+        output_data (bool): the output data flag.
     """
-
     # Define the settings for getting the Base Peak chromatogram
     settings = ChromatogramTraceSettings(TraceType.BasePeak)
 
     # Get the chromatogram from the RAW file.
-    data = rawFile.GetChromatogramData([settings], startScan, endScan)
+    data = raw_file.GetChromatogramData([settings], start_scan, end_scan)
 
     # Split the data into the chromatograms
     trace = ChromatogramSignal.FromChromatogramData(data)
 
-    if outputData:
+    if output_data:
         print(f"Number of traces: {trace.Length}")
         for tr_num, tr in enumerate(trace):
             print(f"Base Peak chromatogram ({tr.Length} points)")
@@ -140,121 +139,123 @@ def GetChromatogram(rawFile, startScan, endScan, outputData):
     print()
 
 
-def ReadScanInformation(rawFile, firstScanNumber, lastScanNumber, outputData):
-    """Reads the general scan information for each scan in the RAW file
+def ReadScanInformation(
+    raw_file, first_scan_number, last_scan_number, output_data
+) -> None:
+    """
+    Reads the general scan information for each scan in the RAW file
     using the scan filter object and also the trailer extra data
     section for that same scan.
 
     Args:
-        rawFile (IRawDataPlus): the RAW file being read.
-        firstScanNumber (int): the first scan in the RAW file.
-        lastScanNumber (int): the last scan in the RAW file.
-        outputData (bool): the output data flag.
+        raw_file (IRawDataPlus): the RAW file being read.
+        first_scan_number (int): the first scan in the RAW file.
+        last_scan_number (int): the last scan in the RAW file.
+        output_data (bool): the output data flag.
     """
-
     # Read each scan in the RAW File
-    for scan in range(firstScanNumber, lastScanNumber):
+    for scan in range(first_scan_number, last_scan_number):
         # Get the retention time for this scan number.  This is one of
         # two comparable functions that will convert between retention
         # time and scan number.
-        time = rawFile.RetentionTimeFromScanNumber(scan)
+        time = raw_file.RetentionTimeFromScanNumber(scan)
 
         # Get the scan filter for this scan number
-        scanFilter = IScanFilter(rawFile.GetFilterForScanNumber(scan))
+        scan_filter = IScanFilter(raw_file.GetFilterForScanNumber(scan))
 
         # Get the scan event for this scan number
-        scanEvent = IScanEventBase(rawFile.GetScanEventForScanNumber(scan))
+        scan_event = IScanEventBase(raw_file.GetScanEventForScanNumber(scan))
 
-        # Get the ionizationMode, MS2 precursor mass, collision
+        # Get the ionization_mode, MS2 precursor mass, collision
         # energy, and isolation width for each scan
-        if scanFilter.MSOrder == MSOrderType.Ms2:
+        if scan_filter.MSOrder == MSOrderType.Ms2:
             # Get the reaction information for the first precursor
-            reaction = scanEvent.GetReaction(0)
+            reaction = scan_event.GetReaction(0)
 
-            precursorMass = reaction.PrecursorMass
-            collisionEnergy = reaction.CollisionEnergy
-            isolationWidth = reaction.IsolationWidth
-            monoisotopicMass = 0.0
-            masterScan = 0
-            ionizationMode = scanFilter.IonizationMode
-            order = scanFilter.MSOrder
+            precursor_mass = reaction.PrecursorMass
+            collision_energy = reaction.CollisionEnergy
+            isolation_width = reaction.IsolationWidth
+            monoisotopic_mass = 0.0
+            master_scan = 0
+            ionization_mode = scan_filter.IonizationMode
+            order = scan_filter.MSOrder
 
             # Get the trailer extra data for this scan and then look
             # for the monoisotopic m/z value in the trailer extra data
             # list
-            trailerData = rawFile.GetTrailerExtraInformation(scan)
+            trailer_data = raw_file.GetTrailerExtraInformation(scan)
 
-            for i in range(trailerData.Length):
-                if trailerData.Labels[i] == "Monoisotopic M/Z:":
-                    monoisotopicMass = float(trailerData.Values[i])
-                elif trailerData.Labels[i] in (
+            for i in range(trailer_data.Length):
+                if trailer_data.Labels[i] == "Monoisotopic M/Z:":
+                    monoisotopic_mass = float(trailer_data.Values[i])
+                elif trailer_data.Labels[i] in (
                     "Master Scan Number:",
                     "Master Scan Number",
                     "Master Index:",
                 ):
-                    masterScan = int(trailerData.Values[i])
+                    master_scan = int(trailer_data.Values[i])
 
-            if outputData:
+            if output_data:
                 print(
                     """Scan number {} @ time {:.2f} - Master scan = {}, Ionization mode={},\
                                 MS Order={}, Precursor mass={:.4f}, Monoisotopic Mass = {:.4f},\
                                 Collision energy={:.2f}, Isolation width={:.2f}""".format(
                         scan,
                         time,
-                        masterScan,
-                        Enum.GetName(IonizationModeType, ionizationMode),
+                        master_scan,
+                        Enum.GetName(IonizationModeType, ionization_mode),
                         Enum.GetName(MSOrderType, order),
-                        precursorMass,
-                        monoisotopicMass,
-                        collisionEnergy,
-                        isolationWidth,
+                        precursor_mass,
+                        monoisotopic_mass,
+                        collision_energy,
+                        isolation_width,
                     )
                 )
 
-        elif scanFilter.MSOrder == MSOrderType.Ms:
-            scanDependents = rawFile.GetScanDependents(scan, 5)
+        elif scan_filter.MSOrder == MSOrderType.Ms:
+            scan_dependents = raw_file.GetScanDependents(scan, 5)
 
             print(
                 "Scan number {} @ time {:.2f} - Instrument type={}, Number dependent scans={}".format(
                     scan,
                     time,
                     Enum.GetName(
-                        RawFileClassification, scanDependents.RawFileInstrumentType
+                        RawFileClassification, scan_dependents.RawFileInstrumentType
                     ),
-                    scanDependents.ScanDependentDetailArray.Length,
+                    scan_dependents.ScanDependentDetailArray.Length,
                 )
             )
 
 
-def GetSpectrum(rawFile, scanNumber, scanFilter, outputData):
-    """Gets the spectrum from the RAW file.
+def GetSpectrum(raw_file, scan_number, scan_filter, output_data) -> None:
+    """
+    Gets the spectrum from the RAW file.
 
     Args:
-        rawFile (IRawDataPlus): the RAW file being read.
-        scanNumber (int): the scan number being read.
-        scanFilter (str): the scan filter for that scan.
-        outputData (bool): the output data flag.
+        raw_file (IRawDataPlus): the RAW file being read.
+        scan_number (int): the scan number being read.
+        scan_filter (str): the scan filter for that scan.
+        output_data (bool): the output data flag.
     """
-
     # Check for a valid scan filter
-    if not scanFilter:
+    if not scan_filter:
         return
 
     # Get the scan statistics from the RAW file for this scan number
-    scanStatistics = rawFile.GetScanStatsForScanNumber(scanNumber)
+    scan_statistics = raw_file.GetScanStatsForScanNumber(scan_number)
 
     # Check to see if the scan has centroid data or profile data.  Depending upon the
     # type of data, different methods will be used to read the data.  While the ReadAllSpectra
     # method demonstrates reading the data using the Scan.FromFile method, generating the
     # Scan object takes more time and memory to do, so that method isn't optimum.
-    if scanStatistics.IsCentroidScan:
+    if scan_statistics.IsCentroidScan:
         # Get the centroid (label) data from the RAW file for this
         # scan
-        centroidStream = rawFile.GetCentroidStream(scanNumber, False)
+        centroid_stream = raw_file.GetCentroidStream(scan_number, False)
 
         print(
             "Spectrum (centroid/label) {} - {} points".format(
-                scanNumber, centroidStream.Length
+                scan_number, centroid_stream.Length
             )
         )
 
@@ -263,79 +264,81 @@ def GetSpectrum(rawFile, scanNumber, scanFilter, outputData):
         # (label data) object is reported in this example.  Please
         # check the documentation for more information about what is
         # available in high resolution centroid (label) data.
-        if outputData:
-            for i in range(centroidStream.Length):
+        if output_data:
+            for i in range(centroid_stream.Length):
                 print(
                     "  {} - {:.4f}, {:.0f}, {:.0f}".format(
                         i,
-                        centroidStream.Masses[i],
-                        centroidStream.Intensities[i],
-                        centroidStream.Charges[i],
+                        centroid_stream.Masses[i],
+                        centroid_stream.Intensities[i],
+                        centroid_stream.Charges[i],
                     )
                 )
             print()
 
     else:
         # Get the segmented (low res and profile) scan data
-        segmentedScan = rawFile.GetSegmentedScanFromScanNumber(
-            scanNumber, scanStatistics
+        segmented_scan = raw_file.GetSegmentedScanFromScanNumber(
+            scan_number, scan_statistics
         )
 
         print(
             "Spectrum (normal data) {} - {} points".format(
-                scanNumber, segmentedScan.Positions.Length
+                scan_number, segmented_scan.Positions.Length
             )
         )
 
         # Print the spectral data (mass, intensity values)
-        if outputData:
-            for i in range(segmentedScan.Positions.Length):
+        if output_data:
+            for i in range(segmented_scan.Positions.Length):
                 print(
                     "  {} - {:.4f}, {:.0f}".format(
-                        i, segmentedScan.Positions[i], segmentedScan.Intensities[i]
+                        i, segmented_scan.Positions[i], segmented_scan.Intensities[i]
                     )
                 )
             print()
 
 
-def GetAverageSpectrum(rawFile, firstScanNumber, lastScanNumber, outputData):
-    """Gets the average spectrum from the RAW file.
+def GetAverageSpectrum(
+    raw_file, first_scan_number, last_scan_number, output_data
+) -> None:
+    """
+    Gets the average spectrum from the RAW file.
 
     Args:
-        rawFile (IRawDataPlus): the RAW file being read.
-        firstScanNumber (int): the first scan to consider for the averaged spectrum.
-        lastScanNumber (int): the last scan to consider for the averaged spectrum.
-        outputData (bool): the output data flag.
+        raw_file (IRawDataPlus): the RAW file being read.
+        first_scan_number (int): the first scan to consider for the averaged spectrum.
+        last_scan_number (int): the last scan to consider for the averaged spectrum.
+        output_data (bool): the output data flag.
     """
-
     # Create the mass options object that will be used when averaging
     # the scans
-    options = Extensions.DefaultMassOptions(rawFile)
+    options = Extensions.DefaultMassOptions(raw_file)
 
     options.ToleranceUnits = ToleranceUnits.ppm
     options.Tolerance = 5.0
 
     # Get the scan filter for the first scan.  This scan filter will be used to located
     # scans within the given scan range of the same type
-    scanFilter = IScanFilter(rawFile.GetFilterForScanNumber(firstScanNumber))
+    scan_filter = IScanFilter(raw_file.GetFilterForScanNumber(first_scan_number))
 
     # Get the average mass spectrum for the provided scan range. In addition to getting the
     # average scan using a scan range, the library also provides a similar method that takes
     # a time range.
-    averageScan = Extensions.AverageScansInScanRange(
-        rawFile, firstScanNumber, lastScanNumber, scanFilter, options
+    average_scan = Extensions.AverageScansInScanRange(
+        raw_file, first_scan_number, last_scan_number, scan_filter, options
     )
 
-    if averageScan.HasCentroidStream:
-        print("Average spectrum ({} points)".format(averageScan.CentroidScan.Length))
+    if average_scan.HasCentroidStream:
+        print("Average spectrum ({} points)".format(average_scan.CentroidScan.Length))
 
         # Print the spectral data (mass, intensity values)
-        if outputData:
-            for i in range(averageScan.CentroidScan.Length):
+        if output_data:
+            for i in range(average_scan.CentroidScan.Length):
                 print(
                     "  {:.4f} {:.0f}".format(
-                        averageScan.CentroidScan.Masses[i],
-                        averageScan.CentroidScan.Intensities[i],
+                        average_scan.CentroidScan.Masses[i],
+                        average_scan.CentroidScan.Intensities[i],
                     )
                 )
 
@@ -346,113 +349,112 @@ def GetAverageSpectrum(rawFile, firstScanNumber, lastScanNumber, outputData):
     for v in [1, 6, 7, 9, 11, 12, 14]:
         scans.Add(v)
 
-    averageScan = Extensions.AverageScans(rawFile, scans, options)
+    average_scan = Extensions.AverageScans(raw_file, scans, options)
 
-    if averageScan.HasCentroidStream:
-        print("Average spectrum ({} points)", averageScan.CentroidScan.Length)
+    if average_scan.HasCentroidStream:
+        print("Average spectrum ({} points)", average_scan.CentroidScan.Length)
 
         # Print the spectral data (mass, intensity values)
-        if outputData:
-            for i in range(averageScan.CentroidScan.Length):
+        if output_data:
+            for i in range(average_scan.CentroidScan.Length):
                 print(
                     "  {:.4f} {:.0f}".format(
-                        averageScan.CentroidScan.Masses[i],
-                        averageScan.CentroidScan.Intensities[i],
+                        average_scan.CentroidScan.Masses[i],
+                        average_scan.CentroidScan.Intensities[i],
                     )
                 )
 
     print()
 
 
-def ReadAllSpectra(rawFile, firstScanNumber, lastScanNumber, outputData):
-    """Read all spectra in the RAW file.
+def ReadAllSpectra(raw_file, first_scan_number, last_scan_number, output_data) -> None:
+    """
+    Read all spectra in the RAW file.
 
     Args:
-        rawFile (IRawDataPlus): the raw file.
-        firstScanNumber (int): the first scan number.
-        lastScanNumber (int): the last scan number.
-        outputData (bool): the output data flag.
+        raw_file (IRawDataPlus): the raw file.
+        first_scan_number (int): the first scan number.
+        last_scan_number (int): the last scan number.
+        output_data (bool): the output data flag.
     """
-
-    for scanNumber in range(firstScanNumber, lastScanNumber):
+    for scan_number in range(first_scan_number, last_scan_number):
         try:
             # Get the scan filter for the spectrum
-            scanFilter = IScanFilter(rawFile.GetFilterForScanNumber(firstScanNumber))
+            scan_filter = IScanFilter(
+                raw_file.GetFilterForScanNumber(first_scan_number)
+            )
 
-            if not scanFilter.ToString():
+            if not scan_filter.ToString():
                 continue
 
             # Get the scan from the RAW file.  This method uses the Scan.FromFile method which returns a
             # Scan object that contains both the segmented and centroid (label) data from an FTMS scan
             # or just the segmented data in non-FTMS scans.  The GetSpectrum method demonstrates an
             # alternative method for reading scans.
-            scan = Scan.FromFile(rawFile, scanNumber)
+            scan = Scan.FromFile(raw_file, scan_number)
 
             # If that scan contains FTMS data then Centroid stream
             # will be populated so check to see if it is present.
-            if scan.HasCentroidStream:
-                labelSize = scan.CentroidScan.Length
-            else:
-                labelSize = 0
+            label_size = scan.CentroidScan.Length if scan.HasCentroidStream else 0
 
             # For non-FTMS data, the preferred data will be populated
             if scan.PreferredMasses is not None:
-                dataSize = scan.PreferredMasses.Length
+                data_size = scan.PreferredMasses.Length
             else:
-                dataSize = 0
+                data_size = 0
 
-            if outputData:
+            if output_data:
                 print(
                     "Spectrum {} - {}: normal {}, label {} points".format(
-                        scanNumber, scanFilter.ToString(), dataSize, labelSize
+                        scan_number, scan_filter.ToString(), data_size, label_size
                     )
                 )
 
-        except Exception as ex:
-            print("Error reading spectrum {} - {}".format(scanNumber, str(ex)))
+        except ValueError as ex:
+            print("Error reading spectrum {} - {}".format(scan_number, str(ex)))
 
 
-def CalculateMassPrecision(rawFile, scanNumber):
-    """Calculates the mass precision for a spectrum.
+def CalculateMassPrecision(raw_file, scan_number) -> None:
+    """
+    Calculates the mass precision for a spectrum.
 
     Args:
-        rawFile (IRawDataPlus): the RAW file being read.
-        scanNumber (int): the scan to process.
+        raw_file (IRawDataPlus): the RAW file being read.
+        scan_number (int): the scan to process.
     """
-
     # Get the scan from the RAW file
-    scan = Scan.FromFile(rawFile, scanNumber)
+    scan = Scan.FromFile(raw_file, scan_number)
 
     # Get the scan event and from the scan event get the analyzer type for this scan
-    scanEvent = IScanEventBase(rawFile.GetScanEventForScanNumber(scanNumber))
+    scan_event = IScanEventBase(raw_file.GetScanEventForScanNumber(scan_number))
 
     # Get the trailer extra data to get the ion time for this file
-    logEntry = rawFile.GetTrailerExtraInformation(scanNumber)
+    log_entry = raw_file.GetTrailerExtraInformation(scan_number)
 
-    trailerHeadings = List[str]()
-    trailerValues = List[str]()
-    for i in range(logEntry.Length):
-        trailerHeadings.Add(logEntry.Labels[i])
-        trailerValues.Add(logEntry.Values[i])
+    trailer_headings = List[str]()
+    trailer_values = List[str]()
+    for i in range(log_entry.Length):
+        trailer_headings.Add(log_entry.Labels[i])
+        trailer_values.Add(log_entry.Values[i])
 
     # Create the mass precision estimate object
-    precisionEstimate = PrecisionEstimate()
+    precision_estimate = PrecisionEstimate()
 
     # Get the ion time from the trailer extra data values
-    ionTime = precisionEstimate.GetIonTime(
-        scanEvent.MassAnalyzer, scan, trailerHeadings, trailerValues
+    ion_time = precision_estimate.GetIonTime(
+        scan_event.MassAnalyzer, scan, trailer_headings, trailer_values
     )
 
     # Calculate the mass precision for the scan
-    listResults = precisionEstimate.GetMassPrecisionEstimate(
-        scan, scanEvent.MassAnalyzer, ionTime, rawFile.RunHeader.MassResolution
+    list_results = precision_estimate.GetMassPrecisionEstimate(
+        scan, scan_event.MassAnalyzer, ion_time, raw_file.RunHeader.MassResolution
     )
 
     # Output the mass precision results
-    if listResults.Count:
+    if list_results.Count:
         print("Mass Precision Results:")
 
-        for result in listResults:
+        for result in list_results:
             print(
                 "Mass {:.5f}, mmu = {:.3f}, ppm = {:.2f}".format(
                     result.Mass, result.MassAccuracyInMmu, result.MassAccuracyInPpm
