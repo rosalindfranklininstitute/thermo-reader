@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2026 RFI
 #
 # SPDX-License-Identifier: Apache-2.0
-from ms_nexus_tools.lib.dtypes import Float1D32, Int1D32, Int3D32
 import math
 from dataclasses import dataclass
 from enum import Enum
@@ -11,29 +10,33 @@ from pathlib import Path
 import datetime as dt
 import logging
 
-from typing import Any, Callable, NamedTuple
+from typing import Any, Callable, NamedTuple, override
 import numpy as np
 import numpy.typing as npt
 
 
-from ms_nexus_tools.lib.bounds import Shape, Chunk
-
-from ms_nexus_tools.lib.data_source import (
+from xartus.lib.bounds import Shape, Chunk
+from xartus.lib.dtypes import Float1D32, Int1D32, Int3D32
+from xartus.lib import (
     AbstractDataSource,
     DataShape,
     Axis,
-    AxisDensity,
+    AxisType,
+    Signal,
 )
-from ms_nexus_tools.lib.sparse_sampling import SparseSampling
-from ms_nexus_tools.lib.multi_coo import (
+from xartus.lib import (
     MultiCOO,
 )
+
+from xartus.lib.multi_linspace import MultiLinspace
 
 from .load_thermo import (
     RawFileReaderAdapter,
 )
 
 from .msi_instrument import MSInstrumentData
+
+from icecream import ic
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +108,8 @@ class DataLines(NamedTuple):
             mass_resolution = instrument_data.stored_mass_resolution()
             tmp_min_s = np.min(line_times)
             tmp_max_s = np.max(line_times)
-            logger.info(
-                f"{lines[ii].file.name}: ({tmp_min_s / 60: >.4f} - {tmp_max_s / 60: >.4f}min)"
+            logger.debug(
+                f"{lines[ii].file.name}: ({tmp_min_s / 60: >.4f} - {tmp_max_s / 60: >.4f}min) {len(line_times)} scans"
             )
 
             if mm_mass is None or mm_time is None or mass_resolution is None:
@@ -163,9 +166,9 @@ class ThermoDataSource(AbstractDataSource):
         pixel_width: float,
         micron_per_second: float,
         micron_per_line: float,
-        sampling: SparseSampling | None = None,
+        sampling: MultiLinspace | None = None,
     ):
-        sampling = sampling if sampling is not None else SparseSampling()
+        sampling = sampling if sampling is not None else MultiLinspace()
 
         filename_prefix = (
             filename_prefix
@@ -203,12 +206,34 @@ class ThermoDataSource(AbstractDataSource):
         self.y_values = np.array(
             [ii * micron_per_line for ii in range(len(self.data_lines.lines))]
         )
+        logger.info(" Lines:")
+        logger.info(f"      : Count: {len(self.data_lines.lines)}")
+        logger.info(f"      : Height: {micron_per_line}um")
+        line_time = np.diff(np.percentile(self.time_values, [0, 100]))[0]
+        logger.info(f"      : Time: {line_time / 60:.2f}min ({line_time:.1f}s)")
+        line_scan_count = MinMax(
+            min(len(scans) for scans in self.data_lines.scan_times),
+            max(len(scans) for scans in self.data_lines.scan_times),
+        )
+        logger.info(
+            f"      : Scans: {line_scan_count.min} - {line_scan_count.max} scans per line."
+        )
+        logger.info(" Pixels:")
+        logger.info(f"       : Speed: {micron_per_second}um/s")
+        logger.info(f"       : Width: {delta_t}s and {delta_m}um")
+        logger.info("")
+
+        logger.info(f" Pixel size: {delta_m:.1f}x{micron_per_line:.1f}um.")
+        logger.info(
+            f" Image size: {np.diff(np.percentile(self.x_values, [0, 100]))[0]}x{np.diff(np.percentile(self.y_values, [0, 100]))[0]}um."
+        )
 
         self.total_shape = (
             len(self.x_values),
             len(self.y_values),
             len(self.mz_edges) - 1,
         )
+        logger.info(f" Image shape: {self.total_shape}.")
 
         start = min(self.data_lines.scan_dates)
         end = max(self.data_lines.scan_dates) + dt.timedelta(
@@ -226,9 +251,11 @@ class ThermoDataSource(AbstractDataSource):
             file_numbers=[line.number for line in self.data_lines.lines],
         )
 
+    @override
     def __enter__(self):
         pass
 
+    @override
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
@@ -258,11 +285,11 @@ class ThermoDataSource(AbstractDataSource):
             ]
             if len(parts) != 1:
                 if len(parts) == 0:
-                    print(
+                    logger.warning(
                         f"Could not parse filename {fle.name}: no line number included."
                     )
                 else:
-                    print(
+                    logger.warning(
                         f"Could not parse filename {fle.name}: Multiple numbers in name."
                     )
                 error = True
@@ -281,7 +308,8 @@ class ThermoDataSource(AbstractDataSource):
                 )
         return lines
 
-    def instrament_metadata(self) -> dict[str, Any]:
+    @override
+    def instrument_metadata(self) -> dict[str, Any]:
         """
         Returns a dictionary of values that will be stored as the instrament metadata.
         """
@@ -289,36 +317,42 @@ class ThermoDataSource(AbstractDataSource):
         # https://github.com/orgs/rosalindfranklininstitute/projects/19/views/1?pane=issue&itemId=213504413
         return {}
 
+    @override
     def experiment_metadata(self) -> dict[str, Any]:
         """
         Returns a dictionary of values that will be stored as the experiment metadata.
         """
         return self.experiment_data
 
+    @override
     def shape(self) -> DataShape:
         """
         Return the shape of the data.
         """
-        return DataShape(self.total_shape, 1.0)
+        return DataShape(self.total_shape, is_sparse=True, worst_case_density=1.0)
 
-    def signal_type(self) -> npt.DTypeLike:
+    @override
+    def signal_definition(self) -> Signal:
         """
         Returns the type for data.
         """
-        return np.int32
+        return Signal("counts", np.int32, units="counts")
 
+    @override
     def output_chunks(self) -> dict[str, Shape]:
         """
         Returns the names and chunking priorities of the desired output array.
         """
         return dict(images=(1, 1, 2), spectra=(2, 2, 1))
 
+    @override
     def chunk_read_count(self, memory_chunk: Shape) -> int:
         """
         Returns the number of read operations needed to fill the provided memory chunk.
         """
-        return np.prod(memory_chunk[0:2])
+        return int(np.prod(memory_chunk[0:2]))
 
+    @override
     def axis_definitions(self) -> list[Axis]:
         """
         Returns the axis that should be used when storing the data.
@@ -327,34 +361,35 @@ class ThermoDataSource(AbstractDataSource):
             Axis(
                 name="x",
                 primary_axis=0,
-                density=AxisDensity.CONTINUOUS,
-                units="m",
-                dtype=np.float32,
+                axis_type=AxisType.EXACT,
+                units="um",
+                dtype=np.float64,
             ),
             Axis(
                 name="time",
                 primary_axis=0,
-                density=AxisDensity.CONTINUOUS,
+                axis_type=AxisType.EXACT,
                 units="s",
-                dtype=np.float32,
+                dtype=np.float64,
             ),
             Axis(
                 name="y",
                 primary_axis=1,
-                density=AxisDensity.CONTINUOUS,
-                units="m",
-                dtype=np.float32,
+                axis_type=AxisType.EXACT,
+                units="um",
+                dtype=np.float64,
             ),
             Axis(
                 name="mz",
                 primary_axis=2,
-                density=AxisDensity.BINNED,
+                axis_type=AxisType.BINNED,
                 units="mz",
-                dtype=np.float32,
+                dtype=np.float64,
             ),
         ]
 
-    def continuous_axis_values(self, axis: Axis) -> np.ndarray:
+    @override
+    def exact_axis_values(self, axis: Axis) -> np.ndarray:
         """
         Returns the values for the specified continuous axis.
         """
@@ -368,15 +403,23 @@ class ThermoDataSource(AbstractDataSource):
             case _:
                 raise ValueError(f"Unknown continuous axis requested: {axis.name}")
 
+    @override
     def binned_axis_edges(self, axis: Axis) -> np.ndarray:
         """
         Returns the bin edges used to histogram the given sparse axis.
         This is used for generting the output accumulations accros this axis, if required.
         """
-        if axis.name != "mz":
-            raise ValueError(f"Unknown sparse axis requested: {axis.name}")
-        return self.mz_edges
+        match axis.name:
+            # case "time":
+            #     return self.time_values
+            # case "x":
+            #     return self.x_values
+            case "mz":
+                return self.mz_edges
+            case _:
+                raise ValueError(f"Unknown sparse axis requested: {axis.name}")
 
+    @override
     def output_accumulations(self) -> dict[str, tuple[str, ...]]:
         """
         Returns the names and lists of axis that should be
@@ -388,10 +431,10 @@ class ThermoDataSource(AbstractDataSource):
         """
         return dict(total_image=("mz",), total_spectra=("x", "y"))
 
+    @override
     def fill_chunk(
         self,
         memory_chunk: Chunk,
-        fill_axis: list[Axis],
         update: Callable[[int], None],
     ) -> np.ndarray | MultiCOO:
         """
@@ -441,7 +484,7 @@ class ThermoDataSource(AbstractDataSource):
                 coords.append(scan_coords)
                 data.append(spec)
                 mz_data.append(mass)
-                update(1)
+            update(memory_chunk.shape[0])
 
         axis = np.concatenate(mz_data)
         labels = np.searchsorted(self.mz_edges[1:], axis)
@@ -449,7 +492,5 @@ class ThermoDataSource(AbstractDataSource):
         final_coords = np.concatenate(coords, axis=1)
         final_coords[2, :] = labels
         return MultiCOO(
-            coords=final_coords,
-            signal=np.concatenate(data),
-            axis=[axis],
+            coords=final_coords, values={"signal": np.concatenate(data), "mz": axis}
         )

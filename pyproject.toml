@@ -10,13 +10,13 @@ readme = "README.md"
 authors = [
     { name = "Duncan McDougall", email = "duncan.mcdougall@rfi.ac.uk" }
 ]
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "colorama>=0.4.6",
-    "datargs",
+    "argsui",
     "h5py>=3.16.0",
     "icecream>=2.1.10",
-    "ms-nexus-tools",
+    "xartus",
     "pythonnet>=3.0.5",
 ]
 license = "Apache-2.0 AND LicenseRef-RawFileReader-reading-tool"
@@ -28,10 +28,6 @@ main = "thermo_reader:source"
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
-
-[tool.uv.sources]
-ms-nexus-tools = { path = "../ms-nexus-tools", editable = true }
-datargs = { path = "../datargs", editable = true }
 
 [tool.line_profiler.kernprof]
 line-by-line = true
@@ -53,3 +49,6 @@ ignore=["C408", "S311", "PTH123", "NPY002", "D203", "D205", "D212", "B006", "ARG
 
 [tool.ruff.lint.per-file-ignores]
 "src/thermo_reader/load_thermo.py" = ["E402", "N802"]
+
+[tool.uv.sources]
+xartus = { path = "../xartus", editable = true }

@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 from dataclasses import dataclass
-from datargs import arg_field, ArgType
-from ms_nexus_tools.api import data_convert
+from argsui import arg_field, ArgType
+from xartus.api import data_convert
 
 from .data_source import PixelMetric, TimeBounds
 
@@ -48,13 +48,6 @@ class ProcessArgs(
         arg_type=ArgType.EXPLICIT_ONLY,
         action="store_false",
         doc="If present will not write out the total spectra and line spectra to a format UniDec can read.",
-    )
-
-    write_imzml: bool = arg_field(
-        "--no-write-imzml",
-        arg_type=ArgType.EXPLICIT_ONLY,
-        action="store_false",
-        doc="If present will not write out the imzMl file.",
     )
 
     write_tic: bool = arg_field(
