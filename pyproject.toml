@@ -52,3 +52,4 @@ ignore=["C408", "S311", "PTH123", "NPY002", "D203", "D205", "D212", "B006", "ARG
 
 [tool.uv.sources]
 xartus = { path = "../xartus", editable = true }
+argsui = { path = "../argsUI", editable = true }

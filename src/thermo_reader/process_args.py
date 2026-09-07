@@ -1,8 +1,12 @@
 # SPDX-FileCopyrightText: 2026 RFI
 #
 # SPDX-License-Identifier: Apache-2.0
+
+import argparse
 from dataclasses import dataclass
-from argsui import arg_field, ArgType
+from pathlib import Path
+
+from argsui import arg_field, ArgType, DirPathType
 from xartus.api import data_convert
 
 from .data_source import PixelMetric, TimeBounds
@@ -12,6 +16,13 @@ from .data_source import PixelMetric, TimeBounds
 class ProcessArgs(
     data_convert.ProcessArgs,
 ):
+    in_path: Path = arg_field(
+        "--input",
+        doc="The name of the folder to import data from.",
+        type=DirPathType(must_exist=True),
+        default=None,
+    )
+
     filename_prefix: str = arg_field(
         doc="A prefix to ignore on the filenames.", default=None
     )
@@ -44,17 +55,15 @@ class ProcessArgs(
     )
 
     write_unidec: bool = arg_field(
-        "--no-write-unidec",
-        arg_type=ArgType.EXPLICIT_ONLY,
-        action="store_false",
+        action=argparse.BooleanOptionalAction,
         doc="If present will not write out the total spectra and line spectra to a format UniDec can read.",
+        default=False,
     )
 
     write_tic: bool = arg_field(
-        "--no-write-tic",
-        arg_type=ArgType.EXPLICIT_ONLY,
-        action="store_false",
+        action=argparse.BooleanOptionalAction,
         doc="If present will not write out the tic image file.",
+        default=False,
     )
 
     down_sampling: int = arg_field(
@@ -68,5 +77,5 @@ resolution of 0.5, there should be 6000 mass bins.
 If '--down-sample=10', then there will be 600 mass bins in the 
 output file.
 """,
-        default=5,
+        default=1,
     )

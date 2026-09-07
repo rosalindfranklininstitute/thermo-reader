@@ -20,12 +20,13 @@ from .process_args import ProcessArgs
 from icecream import ic
 
 
-logging.basicConfig()
+logging.basicConfig(format="%(module)s: %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def source() -> None:
     logger.setLevel(logging.INFO)
+    logging.getLogger(data_convert.__name__).setLevel(logging.INFO)
     partial_args = ProcessArgs.parse_config("thermo")
     process_args = ProcessArgs.parse_interactive(
         "thermo", args=partial_args.remaining_args, exclude=["config"]
@@ -36,7 +37,7 @@ def source() -> None:
         area_volumes=np.array([100]),
     )
     process_args.data_source = ThermoDataSource(
-        in_path=process_args.in_path.parent,
+        in_path=process_args.in_path,
         filename_prefix=process_args.filename_prefix,
         time_bounds=process_args.time_bounds,
         pixel_metric=process_args.pixel_metric,
@@ -49,9 +50,14 @@ def source() -> None:
     with utils.FileGuard(
         process_args.out_path,
         on_failure=utils.FileAction.DELETE,
-        on_success=utils.FileAction.CHECK_EXISTS,
+        on_success=utils.FileAction.CHECK_EXISTS
+        if not process_args.dry_run
+        else utils.FileAction.DO_NOTHING,
     ):
         data_convert.process(process_args, partial_args.config)
+
+    if process_args.dry_run:
+        return
 
     if process_args.write_unidec:
         file_names = process_args.data_source.experiment_data["files"]
