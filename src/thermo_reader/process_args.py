@@ -66,6 +66,12 @@ class ProcessArgs(
         default=False,
     )
 
+    write_imzml: bool = arg_field(
+        action=argparse.BooleanOptionalAction,
+        doc="If present will write out an imzML file in processed mode, removing zeros formthe spectra.",
+        default=False,
+    )
+
     down_sampling: int = arg_field(
         "-n",
         "--down-sampling",

@@ -16,6 +16,7 @@ from xartus.api import data_convert
 
 from .data_source import ThermoDataSource
 from .process_args import ProcessArgs
+from .imzml_writer import write_imzml
 
 from icecream import ic
 
@@ -110,3 +111,10 @@ def source() -> None:
                 y="y",
             )
             fig.savefig(process_args.out_path.with_suffix(".total_ion_count.png"))
+
+    if process_args.write_imzml:
+        write_imzml(
+            process_args.out_path,
+            process_args.out_path.with_suffix(".imzML"),
+            one_indexed=True,
+        )

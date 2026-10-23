@@ -18,7 +18,7 @@ wheels = [
 
 [[package]]
 name = "argsui"
-version = "0.3.1"
+version = "0.3.2"
 source = { editable = "../argsUI" }
 dependencies = [
     { name = "pyside6" },
@@ -521,6 +521,21 @@ wheels = [
 ]
 
 [[package]]
+name = "pyimzml"
+version = "1.5.5"
+source = { editable = "../pyimzML" }
+dependencies = [
+    { name = "numpy" },
+    { name = "wheezy-template" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy" },
+    { name = "wheezy-template" },
+]
+
+[[package]]
 name = "pyinstaller"
 version = "6.19.0"
 source = { registry = "https://pypi.org/simple" }
@@ -721,12 +736,14 @@ dependencies = [
     { name = "colorama" },
     { name = "h5py" },
     { name = "icecream" },
+    { name = "pyimzml" },
     { name = "pythonnet" },
     { name = "xartus" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "icecream" },
     { name = "line-profiler" },
     { name = "pyinstaller" },
 ]
@@ -737,12 +754,14 @@ requires-dist = [
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "h5py", specifier = ">=3.16.0" },
     { name = "icecream", specifier = ">=2.1.10" },
+    { name = "pyimzml", editable = "../pyimzML" },
     { name = "pythonnet", specifier = ">=3.0.5" },
     { name = "xartus", editable = "../xartus" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "icecream", specifier = ">=2.1.10" },
     { name = "line-profiler", specifier = ">=5.0.1" },
     { name = "pyinstaller", specifier = ">=6.19.0" },
 ]
@@ -785,6 +804,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/92/ff/5a28bdfd8c3ebec42
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/6d/b53b99a9f2766d095985947a5782f1702cabb129a34f7a802d7197af832f/tzdata-2026.3-py2.py3-none-any.whl", hash = "sha256:dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931", size = 348168, upload-time = "2026-07-10T08:50:36.46Z" },
 ]
+
+[[package]]
+name = "wheezy-template"
+version = "3.2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/1d/b4fb6ee3f6a0af54ac26e0425b7947bd7d9ed786a75ca173a40640c25bc6/wheezy_template-3.2.5.tar.gz", hash = "sha256:c7c0bf85af0f70ca2ef4b6ea9a74ef372f73392aa17bea0d885dcba7356d0867", size = 19324, upload-time = "2026-02-18T09:05:21.933Z" }
 
 [[package]]
 name = "xarray"

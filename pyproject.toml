@@ -18,6 +18,7 @@ dependencies = [
     "icecream>=2.1.10",
     "xartus",
     "pythonnet>=3.0.5",
+    "pyimzml",
 ]
 license = "Apache-2.0 AND LicenseRef-RawFileReader-reading-tool"
 license-files = ["LICENSES/*"]
@@ -40,6 +41,7 @@ prof-imports = false
 dev = [
     "pyinstaller>=6.19.0",
     "line-profiler>=5.0.1",
+    "icecream>=2.1.10",
 ]
 
 [tool.ruff.lint]
@@ -53,3 +55,4 @@ ignore=["C408", "S311", "PTH123", "NPY002", "D203", "D205", "D212", "B006", "ARG
 [tool.uv.sources]
 xartus = { path = "../xartus", editable = true }
 argsui = { path = "../argsUI", editable = true }
+pyimzml = { path = "../pyimzML", editable = true }
