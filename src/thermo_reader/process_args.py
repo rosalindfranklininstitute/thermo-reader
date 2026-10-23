@@ -39,7 +39,7 @@ class ProcessArgs(
     )
 
     time_bounds: TimeBounds = arg_field(
-        doc="What timing to use for aligning the lines. Subset: data between the largest start time and the smallest end time will be used, and the rest discarded. Superset: all data will be included from the smallest start tim eto the largest end time. Lines which do not fully span this will have their data padded with zeros.",
+        doc="What timing to use for aligning the lines. Subset: data between the largest start time and the smallest end time will be used, and the rest discarded. Superset: all data will be included from the smallest start time to the largest end time. Lines which do not fully span this will have their data padded with zeros.",
         choices=list(TimeBounds),
         default=TimeBounds.SUBSET,
     )
@@ -50,7 +50,7 @@ class ProcessArgs(
     )
 
     micron_per_line: float = arg_field(
-        doc="The distance between each line. Used to convert the seperate files into the spacial dimensions. The lines are concatonated aling the Y axis.",
+        doc="The distance between each line. Used to convert the separate files into the spacial dimensions. The lines are concatenated align the Y axis.",
         default=1.0,
     )
 

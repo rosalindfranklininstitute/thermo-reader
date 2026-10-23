@@ -42,6 +42,7 @@ dev = [
     "pyinstaller>=6.19.0",
     "line-profiler>=5.0.1",
     "icecream>=2.1.10",
+    "pre-commit>=4.7.0",
 ]
 
 [tool.ruff.lint]
@@ -80,3 +81,13 @@ setup_hooks = []
 pre_commit_hooks = []
 post_commit_hooks = []
 allow_shell_hooks = false
+
+[tool.typos.default.extend-identifiers]
+fle = 'fle'
+DNE = 'DNE'
+
+[tool.typos.files]
+extend-exclude = [
+    "*/thermo_reader/dlls*",
+    "*.spec"
+    ]

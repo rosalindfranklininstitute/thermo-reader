@@ -309,7 +309,7 @@ class ThermoDataSource(AbstractDataSource):
     @override
     def instrument_metadata(self) -> dict[str, Any]:
         """
-        Returns a dictionary of values that will be stored as the instrament metadata.
+        Returns a dictionary of values that will be stored as the instrument metadata.
         """
         # TODO @DMD: what can we do here?
         # https://github.com/orgs/rosalindfranklininstitute/projects/19/views/1?pane=issue&itemId=213504413
@@ -405,7 +405,7 @@ class ThermoDataSource(AbstractDataSource):
     def binned_axis_edges(self, axis: Axis) -> np.ndarray:
         """
         Returns the bin edges used to histogram the given sparse axis.
-        This is used for generting the output accumulations accros this axis, if required.
+        This is used for generating the output accumulations acros this axis, if required.
         """
         match axis.name:
             case "mz":
@@ -418,7 +418,7 @@ class ThermoDataSource(AbstractDataSource):
         """
         Returns the names and lists of axis that should be
         accumulated (summed and max).
-        For examlpe simple image data (x,y, spectra):
+        For example simple image data (x,y, spectra):
         might produce:
         'total_images':     ('mz') # Accumulate over the spectra
         'total_spectra':    ('x','y') # Accumulate over the images
@@ -438,7 +438,7 @@ class ThermoDataSource(AbstractDataSource):
 
         Parameters:
         memory_chunk:   The bounds of the data to read.
-        fill_axis:      The list of sparce axis to fill.
+        fill_axis:      The list of sparse axis to fill.
         update:         A callback to update progress.
                         The total of the progress counter is
                         sum([chunk_read_count(mc) for mc in all_memory_chunks])
