@@ -12,7 +12,6 @@ import logging
 
 from typing import Any, Callable, NamedTuple, override
 import numpy as np
-import numpy.typing as npt
 
 
 from xartus.lib.bounds import Shape, Chunk
@@ -36,7 +35,6 @@ from .load_thermo import (
 
 from .msi_instrument import MSInstrumentData
 
-from icecream import ic
 
 logger = logging.getLogger(__name__)
 
@@ -410,10 +408,6 @@ class ThermoDataSource(AbstractDataSource):
         This is used for generting the output accumulations accros this axis, if required.
         """
         match axis.name:
-            # case "time":
-            #     return self.time_values
-            # case "x":
-            #     return self.x_values
             case "mz":
                 return self.mz_edges
             case _:

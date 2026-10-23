@@ -5,7 +5,6 @@ import logging
 
 from typing import cast
 
-import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
@@ -17,8 +16,6 @@ from xartus.api import data_convert
 from .data_source import ThermoDataSource
 from .process_args import ProcessArgs
 from .imzml_writer import write_imzml
-
-from icecream import ic
 
 
 logging.basicConfig(format="%(module)s: %(levelname)s: %(message)s")

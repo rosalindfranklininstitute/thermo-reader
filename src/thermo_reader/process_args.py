@@ -6,7 +6,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-from argsui import arg_field, ArgType, DirPathType
+from argsui import arg_field, DirPathType
 from xartus.api import data_convert
 
 from .data_source import PixelMetric, TimeBounds

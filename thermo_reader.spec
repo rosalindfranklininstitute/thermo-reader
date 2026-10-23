@@ -1,14 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+
+# SPDX-FileCopyrightText: 2026 RFI
+#
+# SPDX-License-Identifier: Apache-2.0
+
 from PyInstaller.utils.hooks import collect_all
 
 datas = [('src\\thermo_reader\\dlls', 'thermo_reader\\dlls')]
 binaries = []
 hiddenimports = []
-tmp_ret = collect_all('nexusformat')
+tmp_ret = collect_all('xartus')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('ms-nexus-tools')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('datargs')
+tmp_ret = collect_all('argsui')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('pyimzml')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 RFI
+#
+# SPDX-License-Identifier: Apache-2.0
+
 **/__pycache__/
 tmp_data/
 
@@ -17,3 +21,9 @@ coverage.xml
 cover/
 build/
 
+# Performance checking
+*.lines
+*.lprof
+
+# Config files
+config*.toml

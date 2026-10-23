@@ -15,7 +15,7 @@ from pyimzml.ImzMLWriter import ImzMLWriter
 from pyimzml.compression import NoCompression
 
 
-def write_imzml(nx_path: Path, out_path: Path, one_indexed=True):
+def write_imzml(nx_path: Path, out_path: Path, one_indexed=True) -> None:
     with utils.DeferredAction() as defer:
         data = xr.open_datatree(nx_path, engine="nexus")
         defer(data.close)
